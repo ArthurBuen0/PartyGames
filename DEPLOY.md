@@ -94,20 +94,49 @@ Rode também `npm run dev` e abra em duas abas para ver a sincronização aconte
 
 ### 2.1 Mandar o código para o GitHub
 
-Se ainda não for um repositório:
+**Se o projeto ainda não for um repositório:**
 
 ```bash
 git init
+git config user.name "Seu Nome"
+git config user.email "seu@email.com"
 git add .
 git commit -m "Party Games — sala multiplayer em tempo real"
+git branch -M main
 ```
 
-Crie um repositório vazio no GitHub e:
+Sem `user.name` e `user.email` configurados, o `git commit` falha — é o tropeço mais comum
+de quem está usando git pela primeira vez na máquina.
+
+**Crie o repositório no GitHub** em [github.com/new](https://github.com/new):
+
+- Nome: `party-games`
+- Público ou privado, tanto faz (a Vercel funciona com os dois)
+- ⚠️ **Não marque** *Add a README*, *Add .gitignore* nem *Choose a license*
+
+> Marcar qualquer uma dessas cria um commit no GitHub, e aí o seu `push` é recusado com
+> `rejected — non-fast-forward`. O conserto está na tabela de erros mais abaixo.
+
+**Conecte e envie:**
 
 ```bash
 git remote add origin https://github.com/SEU-USUARIO/party-games.git
-git branch -M main
 git push -u origin main
+```
+
+Na primeira vez, o **Git Credential Manager** abre uma janela do navegador para você entrar no
+GitHub. Autorize e o push continua sozinho — e a credencial fica salva para as próximas.
+
+Se em vez da janela aparecer `Username for 'https://github.com':` no terminal, o gerenciador
+não está ativo. Nesse caso use um token no lugar da senha:
+[github.com/settings/tokens](https://github.com/settings/tokens) → *Generate new token
+(classic)* → marque o escopo **`repo`** → copie e cole quando pedir a senha.
+
+Confirme que subiu:
+
+```bash
+git log --oneline -1        # o commit existe localmente
+git ls-remote origin main   # e agora existe no GitHub também
 ```
 
 > O `.env` **não** vai junto: ele está no `.gitignore`. As chaves entram direto na Vercel.
@@ -168,6 +197,10 @@ npm run checar -- https://xxxxx.supabase.co eyJhbGciOi...
 
 | O que você vê | O que é | Como arrumar |
 | --- | --- | --- |
+| Vercel: *"repository does not contain the requested branch or commit"* | O repositório no GitHub está vazio — o `push` não chegou a acontecer | Rode o `git push -u origin main` (§2.1) e importe de novo |
+| `git push` → *"rejected — non-fast-forward"* | Você criou o repo com README, então há um commit lá que não existe aqui | `git pull --rebase origin main` e depois `git push -u origin main` |
+| `git push` → *"repository not found"* | URL do remote errada ou sem acesso | `git remote -v` para conferir; corrija com `git remote set-url origin <url>` |
+| `git commit` → *"Please tell me who you are"* | Falta a identidade do git | `git config user.name "..."` e `git config user.email "..."` |
 | Tela "Falta conectar o Supabase" | As variáveis não estavam lá na hora do build | Adicione as duas e **Redeploy** (§2.3) |
 | "Não achei nenhuma sala com esse código" logo ao criar | O SQL não foi aplicado | Cole o `supabase/tudo.sql` no SQL Editor |
 | Trava ao entrar, sem mensagem | Login anônimo desligado | §1.2 |
