@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { garantirSessao, supabaseConfigurado } from "./lib/supabase";
+import { garantirSessao, problemasDeConfig, supabaseConfigurado } from "./lib/supabase";
 import { traduzirErro } from "./lib/erros";
 import { Carregando, Cartao, ProvedorAvisos } from "./componentes/Base";
 import { Inicio } from "./paginas/Inicio";
@@ -53,27 +53,46 @@ export function App() {
   );
 }
 
-/** Sem .env não dá para nem começar — melhor explicar do que mostrar tela branca. */
+/**
+ * Configuração incompleta ou errada.
+ *
+ * Em vez de um texto genérico, a tela diz qual variável está com problema e
+ * qual é o problema — inclusive quando o valor foi colado no campo errado.
+ * Quem estiver publicando consegue arrumar sem abrir o DevTools.
+ */
 function FaltaConfigurar() {
   return (
     <main className="mx-auto grid min-h-dvh max-w-2xl place-items-center p-4">
       <Cartao>
         <h1 className="fonte-titulo text-2xl text-roxo-900">Falta conectar o Supabase 🔌</h1>
 
-        <p className="mt-3 text-texto-suave">
-          Crie um arquivo <code className="rounded bg-superficie-2 px-1.5 py-0.5">.env</code> na
-          raiz do projeto com as duas chaves do seu projeto Supabase:
+        <ul className="mt-4 flex flex-col gap-3">
+          {problemasDeConfig.map((p) => (
+            <li
+              key={p.variavel}
+              className="rounded-[var(--radius-suave)] border border-coral-100 bg-coral-100/40 p-4"
+            >
+              <p className="font-mono text-sm font-bold text-coral-600">{p.variavel}</p>
+              <p className="mt-1 font-bold text-texto">{p.problema}</p>
+              <p className="mt-1 text-sm text-texto-suave">{p.comoArrumar}</p>
+            </li>
+          ))}
+        </ul>
+
+        <p className="mt-5 text-texto-suave">
+          Rodando na sua máquina? Crie um{" "}
+          <code className="rounded bg-superficie-2 px-1.5 py-0.5">.env</code> na raiz do projeto:
         </p>
 
         <pre className="mt-3 overflow-x-auto rounded-[var(--radius-suave)] bg-roxo-900 p-4 text-sm text-white">
 {`VITE_SUPABASE_URL=https://xxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOi...`}
+VITE_SUPABASE_ANON_KEY=sb_publishable_xxxxx`}
         </pre>
 
         <p className="mt-3 text-texto-suave">
-          Depois aplique os arquivos de <code className="rounded bg-superficie-2 px-1.5 py-0.5">supabase/</code>{" "}
-          no SQL Editor, na ordem 01 → 05, e reinicie o <code className="rounded bg-superficie-2 px-1.5 py-0.5">npm run dev</code>.
-          O passo a passo completo está no README.
+          Publicado na Vercel? Ajuste em <strong>Settings → Environment Variables</strong> e faça
+          um <strong>Redeploy</strong> — os valores entram no site durante o build, então salvar
+          sozinho não muda nada. O passo a passo está no DEPLOY.md.
         </p>
       </Cartao>
     </main>

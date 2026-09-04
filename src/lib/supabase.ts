@@ -6,17 +6,80 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * A autenticação é anônima: ninguém cria conta para jogar. O `auth.uid()` da
  * sessão é o que amarra a pessoa ao assento dela na sala — e é sobre ele que
  * todas as políticas de RLS decidem o que pode ser lido.
+ *
+ * Sobre a validação abaixo: `createClient` lança exceção se a URL for
+ * inválida. Como isso acontece durante a importação do módulo, o React nem
+ * chega a montar e a pessoa vê uma tela branca, sem pista nenhuma. Já custou
+ * uma sessão de depuração — então aqui a configuração é conferida antes, e o
+ * app troca a tela branca por uma explicação do que está faltando.
  */
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const chave = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const url = (import.meta.env.VITE_SUPABASE_URL ?? "").trim();
+const chave = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? "").trim();
 
-/** Falta configurar o .env? A interface avisa em vez de quebrar em branco. */
-export const supabaseConfigurado = Boolean(url && chave);
+function ehUrlHttp(valor: string): boolean {
+  try {
+    const partes = new URL(valor);
+    return partes.protocol === "https:" || partes.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
 
+export interface ProblemaDeConfig {
+  variavel: string;
+  problema: string;
+  comoArrumar: string;
+}
+
+/** O que está faltando ou errado no .env / nas variáveis da hospedagem. */
+export const problemasDeConfig: ProblemaDeConfig[] = [];
+
+if (!url) {
+  problemasDeConfig.push({
+    variavel: "VITE_SUPABASE_URL",
+    problema: "não foi definida",
+    comoArrumar: "Copie a Project URL em Supabase → Project Settings → API"
+  });
+} else if (!ehUrlHttp(url)) {
+  problemasDeConfig.push({
+    variavel: "VITE_SUPABASE_URL",
+    problema: `recebeu um valor que não é um endereço: "${url.slice(0, 40)}"`,
+    comoArrumar: "O valor deve ser algo como https://xxxxx.supabase.co"
+  });
+}
+
+if (!chave) {
+  problemasDeConfig.push({
+    variavel: "VITE_SUPABASE_ANON_KEY",
+    problema: "não foi definida",
+    comoArrumar: "Use a chave publishable (sb_publishable_…) ou a anon (eyJ…)"
+  });
+} else if (chave.startsWith("sb_secret_") || chave.includes("service_role")) {
+  problemasDeConfig.push({
+    variavel: "VITE_SUPABASE_ANON_KEY",
+    problema: "recebeu a chave SECRETA",
+    comoArrumar:
+      "Troque pela chave pública imediatamente e revogue esta — a secreta ignora o RLS"
+  });
+} else if (ehUrlHttp(chave)) {
+  problemasDeConfig.push({
+    variavel: "VITE_SUPABASE_ANON_KEY",
+    problema: "recebeu um endereço, não uma chave",
+    comoArrumar: "Parece que os valores das duas variáveis foram trocados"
+  });
+}
+
+export const supabaseConfigurado = problemasDeConfig.length === 0;
+
+/**
+ * Valores de reserva mantêm o `createClient` de explodir quando a configuração
+ * está errada. Nesse caso o app nem tenta falar com o servidor: mostra a tela
+ * que explica o problema.
+ */
 export const supabase: SupabaseClient = createClient(
-  url ?? "http://localhost:54321",
-  chave ?? "chave-ausente",
+  ehUrlHttp(url) ? url : "http://localhost:54321",
+  chave || "chave-ausente",
   {
     auth: {
       persistSession: true,
