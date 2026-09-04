@@ -1,0 +1,1715 @@
+/* =========================================================================
+   Sorteia Aí — folha de estilos única
+   Mobile-first: tudo é desenhado para o celular e cresce a partir dos
+   breakpoints de 640px (tablet) e 960px (desktop).
+   ========================================================================= */
+
+/* ------------------------------------------------------------- 1. Tokens */
+
+:root {
+  /* Paleta */
+  --roxo-900: #3b0764;
+  --roxo-700: #6d28d9;
+  --roxo-600: #7c3aed;
+  --roxo-500: #8b5cf6;
+  --roxo-100: #ede9fe;
+  --roxo-50: #f5f3ff;
+
+  --rosa-600: #db2777;
+  --rosa-500: #ec4899;
+  --rosa-100: #fce7f3;
+
+  --amarelo-500: #facc15;
+  --amarelo-400: #fde047;
+  --amarelo-100: #fef9c3;
+
+  --turquesa-500: #14b8a6;
+  --turquesa-100: #ccfbf1;
+  --coral-500: #fb7185;
+  --coral-100: #ffe4e6;
+  --azul-500: #38bdf8;
+  --azul-100: #e0f2fe;
+
+  /* Superfícies */
+  --fundo: #faf7ff;
+  --superficie: #ffffff;
+  --superficie-2: #f6f2ff;
+  --borda: #ece6fb;
+  --borda-forte: #ddd2f7;
+
+  /* Texto */
+  --texto: #2a1a4a;
+  --texto-suave: #6b5b8a;
+  --texto-fraco: #94879f;
+
+  /* Formas */
+  --r-sm: 12px;
+  --r-md: 18px;
+  --r-lg: 24px;
+  --r-xl: 32px;
+  --r-pill: 999px;
+
+  /* Sombras */
+  --sombra-sm: 0 2px 8px rgba(76, 29, 149, 0.06);
+  --sombra-md: 0 6px 20px rgba(76, 29, 149, 0.09);
+  --sombra-lg: 0 16px 40px rgba(76, 29, 149, 0.14);
+  --sombra-roxa: 0 10px 24px rgba(109, 40, 217, 0.28);
+
+  /* Tipografia */
+  --fonte-titulo: "Baloo 2", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --fonte-corpo: "Nunito", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  /* Movimento */
+  --transicao: 200ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Alturas fixas */
+  --altura-nav: 68px;
+}
+
+/* Cores de destaque por jogo — usadas via [data-cor] */
+[data-cor="roxo"] {
+  --destaque: var(--roxo-600);
+  --destaque-claro: var(--roxo-100);
+}
+[data-cor="rosa"] {
+  --destaque: var(--rosa-500);
+  --destaque-claro: var(--rosa-100);
+}
+[data-cor="amarelo"] {
+  --destaque: #ca8a04;
+  --destaque-claro: var(--amarelo-100);
+}
+[data-cor="turquesa"] {
+  --destaque: #0d9488;
+  --destaque-claro: var(--turquesa-100);
+}
+[data-cor="coral"] {
+  --destaque: #e11d48;
+  --destaque-claro: var(--coral-100);
+}
+[data-cor="azul"] {
+  --destaque: #0284c7;
+  --destaque-claro: var(--azul-100);
+}
+
+/* --------------------------------------------------------------- 2. Base */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: var(--fonte-corpo);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--texto);
+  background: var(--fundo);
+  /* Manchas suaves de cor no fundo, fixas atrás de tudo */
+  background-image:
+    radial-gradient(60vw 60vw at 15% -10%, rgba(139, 92, 246, 0.16), transparent 60%),
+    radial-gradient(50vw 50vw at 100% 8%, rgba(236, 72, 153, 0.12), transparent 60%),
+    radial-gradient(48vw 48vw at 50% 100%, rgba(250, 204, 21, 0.14), transparent 60%);
+  background-attachment: fixed;
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--fonte-titulo);
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+:where(a) {
+  color: var(--roxo-700);
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+/* Foco visível e consistente no app inteiro */
+:focus-visible {
+  outline: 3px solid var(--roxo-500);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/*
+ * Ao trocar de tela o foco vai para o título, para o leitor de tela anunciar
+ * onde a pessoa está. Como título não é controle, não desenhamos o anel nele
+ * — o foco continua visível em tudo que é clicável.
+ */
+h1[tabindex="-1"]:focus,
+h2[tabindex="-1"]:focus {
+  outline: none;
+}
+
+.pular-para-conteudo {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translate(-50%, -200%);
+  z-index: 100;
+  padding: 12px 20px;
+  border-radius: var(--r-pill);
+  background: var(--roxo-700);
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform var(--transicao);
+}
+
+.pular-para-conteudo:focus {
+  transform: translate(-50%, 0);
+}
+
+/* Só para leitores de tela */
+.apenas-leitor {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------------------ 3. Estrutura */
+
+.envoltorio {
+  width: 100%;
+  max-width: 1120px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+
+.conteudo {
+  /* Espaço para a barra inferior não cobrir o final da página */
+  padding-bottom: calc(var(--altura-nav) + env(safe-area-inset-bottom) + 24px);
+}
+
+@media (min-width: 960px) {
+  .conteudo {
+    padding-bottom: 64px;
+  }
+}
+
+/* Cabeçalho */
+
+.cabecalho {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(250, 247, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--transicao), box-shadow var(--transicao);
+}
+
+.cabecalho.rolou {
+  border-bottom-color: var(--borda);
+  box-shadow: var(--sombra-sm);
+}
+
+.cabecalho__interno {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+}
+
+.marca {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: 0;
+  padding: 6px;
+  margin-left: -6px;
+  border-radius: var(--r-md);
+}
+
+.marca__dado {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--roxo-500), var(--roxo-700) 55%, var(--rosa-500));
+  box-shadow: var(--sombra-roxa);
+  font-size: 20px;
+  transition: transform var(--transicao);
+}
+
+.marca:hover .marca__dado {
+  transform: rotate(-12deg) scale(1.06);
+}
+
+.marca__nome {
+  font-family: var(--fonte-titulo);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--roxo-900);
+}
+
+/* Navegação de topo — só no desktop */
+.nav-topo {
+  display: none;
+  gap: 4px;
+}
+
+@media (min-width: 960px) {
+  .nav-topo {
+    display: flex;
+    align-items: center;
+  }
+}
+
+.nav-topo__item {
+  border: 0;
+  background: none;
+  padding: 10px 16px;
+  border-radius: var(--r-pill);
+  font-weight: 700;
+  color: var(--texto-suave);
+  transition: background var(--transicao), color var(--transicao);
+}
+
+.nav-topo__item:hover {
+  background: var(--roxo-50);
+  color: var(--roxo-700);
+}
+
+.nav-topo__item[aria-current="page"] {
+  background: var(--roxo-100);
+  color: var(--roxo-700);
+}
+
+/* Barra inferior — só no celular */
+.nav-inferior {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid var(--borda);
+  box-shadow: 0 -4px 20px rgba(76, 29, 149, 0.06);
+}
+
+@media (min-width: 960px) {
+  .nav-inferior {
+    display: none;
+  }
+}
+
+.nav-inferior__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 52px;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--texto-fraco);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  transition: color var(--transicao), background var(--transicao);
+}
+
+.nav-inferior__item svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform var(--transicao);
+}
+
+.nav-inferior__item[aria-current="page"] {
+  color: var(--roxo-700);
+  background: var(--roxo-50);
+}
+
+.nav-inferior__item[aria-current="page"] svg {
+  transform: translateY(-2px) scale(1.06);
+}
+
+.nav-inferior__item:active svg {
+  transform: scale(0.9);
+}
+
+/* ------------------------------------------------------------- 4. Telas */
+
+.tela[hidden] {
+  display: none;
+}
+
+.tela {
+  animation: entrar-tela 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes entrar-tela {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ------------------------------------------------------------ 5. Botões */
+
+.botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 14px 24px;
+  border: 2px solid transparent;
+  border-radius: var(--r-pill);
+  font-family: var(--fonte-titulo);
+  font-size: 1.02rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform var(--transicao), box-shadow var(--transicao),
+    background var(--transicao), border-color var(--transicao), color var(--transicao);
+}
+
+.botao:active {
+  transform: scale(0.97);
+}
+
+.botao--principal {
+  background: linear-gradient(135deg, var(--roxo-600), var(--roxo-700) 60%, #5b21b6);
+  color: #fff;
+  box-shadow: var(--sombra-roxa);
+}
+
+.botao--principal:hover {
+  box-shadow: 0 14px 30px rgba(109, 40, 217, 0.36);
+  transform: translateY(-2px);
+}
+
+.botao--secundario {
+  background: var(--superficie);
+  color: var(--roxo-700);
+  border-color: var(--borda-forte);
+  box-shadow: var(--sombra-sm);
+}
+
+.botao--secundario:hover {
+  background: var(--roxo-50);
+  border-color: var(--roxo-500);
+  transform: translateY(-2px);
+}
+
+.botao--rosa {
+  background: linear-gradient(135deg, var(--rosa-500), var(--rosa-600));
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(219, 39, 119, 0.3);
+}
+
+.botao--rosa:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(219, 39, 119, 0.38);
+}
+
+.botao--amarelo {
+  background: linear-gradient(135deg, var(--amarelo-400), var(--amarelo-500));
+  color: #4a3308;
+  box-shadow: 0 10px 24px rgba(202, 138, 4, 0.28);
+}
+
+.botao--amarelo:hover {
+  transform: translateY(-2px);
+}
+
+.botao--fantasma {
+  background: transparent;
+  color: var(--texto-suave);
+  min-height: 44px;
+  padding: 10px 16px;
+}
+
+.botao--fantasma:hover {
+  background: var(--roxo-50);
+  color: var(--roxo-700);
+}
+
+.botao--largo {
+  width: 100%;
+}
+
+.botao--grande {
+  min-height: 60px;
+  font-size: 1.12rem;
+  padding-inline: 32px;
+}
+
+.botao[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none;
+}
+
+.botao__emoji {
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+/* -------------------------------------------------------- 6. Tela inicial */
+
+.heroi {
+  display: grid;
+  gap: 28px;
+  padding-block: 32px 12px;
+  text-align: center;
+}
+
+@media (min-width: 960px) {
+  .heroi {
+    grid-template-columns: 1.1fr 0.9fr;
+    align-items: center;
+    text-align: left;
+    gap: 48px;
+    padding-block: 56px 24px;
+  }
+}
+
+.selo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  border-radius: var(--r-pill);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  box-shadow: var(--sombra-sm);
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--roxo-700);
+  margin-inline: auto;
+}
+
+@media (min-width: 960px) {
+  .selo {
+    margin-inline: 0;
+  }
+}
+
+.heroi__titulo {
+  font-size: clamp(2.1rem, 8.5vw, 3.4rem);
+  margin-block: 18px 14px;
+  color: var(--roxo-900);
+}
+
+.heroi__titulo em {
+  font-style: normal;
+  position: relative;
+  color: var(--roxo-700);
+  white-space: nowrap;
+}
+
+/* Rabisco amarelo embaixo da frase de efeito */
+.heroi__titulo em::after {
+  content: "";
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  bottom: 0.06em;
+  height: 0.32em;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--amarelo-400), var(--rosa-500));
+  opacity: 0.35;
+  z-index: -1;
+}
+
+.heroi__texto {
+  font-size: 1.06rem;
+  color: var(--texto-suave);
+  max-width: 46ch;
+  margin-inline: auto;
+}
+
+@media (min-width: 960px) {
+  .heroi__texto {
+    margin-inline: 0;
+  }
+}
+
+.heroi__acoes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+/* Nos botões lado a lado, o rótulo nunca quebra em duas linhas */
+.heroi__acoes .botao {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (min-width: 520px) {
+  .heroi__acoes {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+@media (min-width: 960px) {
+  .heroi__acoes {
+    justify-content: flex-start;
+  }
+}
+
+/* Ilustração do herói: cartas empilhadas */
+.heroi__arte {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+}
+
+.carta-flutuante {
+  position: absolute;
+  display: grid;
+  gap: 6px;
+  place-items: center;
+  width: 132px;
+  padding: 20px 14px;
+  border-radius: var(--r-lg);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  box-shadow: var(--sombra-lg);
+  font-family: var(--fonte-titulo);
+  font-weight: 700;
+  font-size: 0.86rem;
+  text-align: center;
+  animation: flutuar 5s ease-in-out infinite;
+}
+
+.carta-flutuante span:first-child {
+  font-size: 2.1rem;
+  line-height: 1;
+}
+
+/* Quanto as cartas laterais se afastam do centro (sem cobrir os rótulos) */
+.heroi__arte {
+  --espalhar: 84px;
+}
+
+@media (min-width: 960px) {
+  .heroi__arte {
+    --espalhar: 118px;
+  }
+}
+
+.carta-flutuante:nth-child(1) {
+  transform: rotate(-11deg) translate(calc(var(--espalhar) * -1), 10px);
+  animation-delay: 0s;
+}
+
+.carta-flutuante:nth-child(2) {
+  transform: translateY(-16px) scale(1.06);
+  z-index: 2;
+  animation-delay: 0.6s;
+}
+
+.carta-flutuante:nth-child(3) {
+  transform: rotate(11deg) translate(var(--espalhar), 10px);
+  animation-delay: 1.2s;
+}
+
+@keyframes flutuar {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -10px;
+  }
+}
+
+/* Os três cards: Sorteie / Joguem juntos / Divirtam-se */
+.passos {
+  display: grid;
+  gap: 16px;
+  padding-block: 28px 8px;
+}
+
+@media (min-width: 640px) {
+  .passos {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.passo {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 26px 22px;
+  border-radius: var(--r-lg);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  box-shadow: var(--sombra-md);
+  transition: transform var(--transicao), box-shadow var(--transicao);
+}
+
+.passo:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--sombra-lg);
+}
+
+.passo__icone {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: var(--r-md);
+  background: var(--destaque-claro, var(--roxo-100));
+  font-size: 26px;
+}
+
+.passo__numero {
+  position: absolute;
+  top: 20px;
+  right: 22px;
+  font-family: var(--fonte-titulo);
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: var(--roxo-100);
+  line-height: 1;
+}
+
+.passo h3 {
+  font-size: 1.24rem;
+  margin-top: 6px;
+}
+
+.passo p {
+  color: var(--texto-suave);
+  font-size: 0.96rem;
+}
+
+/* Faixa final da home */
+.faixa-cta {
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+  text-align: center;
+  margin-block: 32px 8px;
+  padding: 34px 24px;
+  border-radius: var(--r-xl);
+  background: linear-gradient(135deg, var(--roxo-700), var(--roxo-600) 45%, var(--rosa-500));
+  color: #fff;
+  box-shadow: var(--sombra-lg);
+}
+
+.faixa-cta h2 {
+  font-size: clamp(1.4rem, 5vw, 2rem);
+}
+
+.faixa-cta p {
+  color: rgba(255, 255, 255, 0.9);
+  max-width: 48ch;
+}
+
+.faixa-cta .botao--secundario {
+  border-color: transparent;
+  color: var(--roxo-700);
+}
+
+/* -------------------------------------------------- 7. Cabeçalho de seção */
+
+.secao-topo {
+  display: grid;
+  gap: 6px;
+  padding-block: 28px 20px;
+}
+
+.secao-topo h2 {
+  font-size: clamp(1.7rem, 6vw, 2.4rem);
+  color: var(--roxo-900);
+}
+
+.secao-topo p {
+  margin-top: 8px;
+  color: var(--texto-suave);
+  max-width: 56ch;
+}
+
+.secao-topo__linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+/* No celular o botão de sortear ocupa a linha inteira, fácil de acertar */
+@media (max-width: 639px) {
+  .secao-topo__linha > .botao {
+    width: 100%;
+  }
+}
+
+/* ------------------------------------------------------ 8. Lista de jogos */
+
+.grade-jogos {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .grade-jogos {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 960px) {
+  .grade-jogos {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.card-jogo {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  width: 100%;
+  padding: 22px;
+  text-align: left;
+  border: 1px solid var(--borda);
+  border-radius: var(--r-lg);
+  background: var(--superficie);
+  box-shadow: var(--sombra-md);
+  overflow: hidden;
+  transition: transform var(--transicao), box-shadow var(--transicao),
+    border-color var(--transicao);
+}
+
+/* Barrinha colorida no topo do card */
+.card-jogo::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 6px;
+  background: var(--destaque);
+  transform: scaleX(0.28);
+  transform-origin: left;
+  transition: transform var(--transicao);
+}
+
+.card-jogo:hover,
+.card-jogo:focus-visible {
+  transform: translateY(-5px);
+  box-shadow: var(--sombra-lg);
+  border-color: var(--destaque);
+}
+
+.card-jogo:hover::before,
+.card-jogo:focus-visible::before {
+  transform: scaleX(1);
+}
+
+.card-jogo:active {
+  transform: translateY(-1px) scale(0.99);
+}
+
+/* Emoji e título dividem a mesma linha: card mais curto no celular */
+.card-jogo__topo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.card-jogo__emoji {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 54px;
+  height: 54px;
+  border-radius: var(--r-md);
+  background: var(--destaque-claro);
+  font-size: 28px;
+  transition: transform var(--transicao);
+}
+
+.card-jogo:hover .card-jogo__emoji {
+  transform: rotate(-8deg) scale(1.08);
+}
+
+.card-jogo__titulo {
+  font-size: 1.26rem;
+  color: var(--roxo-900);
+}
+
+.card-jogo__resumo {
+  color: var(--texto-suave);
+  font-size: 0.95rem;
+}
+
+.card-jogo__rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  background: var(--superficie-2);
+  color: var(--texto-suave);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.etiqueta--destaque {
+  background: var(--destaque-claro);
+  color: var(--destaque);
+}
+
+.card-jogo__seta {
+  margin-left: auto;
+  color: var(--destaque);
+  font-weight: 800;
+  transition: transform var(--transicao);
+}
+
+.card-jogo:hover .card-jogo__seta {
+  transform: translateX(4px);
+}
+
+/* Card de sorteio dentro da grade */
+.card-sortear {
+  display: grid;
+  gap: 12px;
+  place-items: center;
+  text-align: center;
+  padding: 26px 22px;
+  border-radius: var(--r-lg);
+  border: 2px dashed var(--borda-forte);
+  background: linear-gradient(135deg, var(--roxo-50), var(--rosa-100));
+  color: var(--texto);
+  transition: transform var(--transicao), border-color var(--transicao);
+}
+
+.card-sortear:hover {
+  transform: translateY(-5px);
+  border-color: var(--roxo-500);
+}
+
+.card-sortear__dado {
+  font-size: 40px;
+  animation: balancar 3.4s ease-in-out infinite;
+}
+
+@keyframes balancar {
+  0%,
+  86%,
+  100% {
+    transform: rotate(0);
+  }
+  90% {
+    transform: rotate(-14deg);
+  }
+  94% {
+    transform: rotate(14deg);
+  }
+}
+
+/* --------------------------------------------------- 9. Tela de cada jogo */
+
+.jogo-topo {
+  display: grid;
+  justify-items: start;
+  gap: 18px;
+  padding-block: 20px 24px;
+}
+
+.jogo-identidade {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.jogo-identidade__emoji {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 68px;
+  height: 68px;
+  border-radius: var(--r-lg);
+  background: var(--destaque-claro);
+  font-size: 36px;
+  box-shadow: var(--sombra-sm);
+}
+
+.jogo-identidade h1 {
+  font-size: clamp(1.6rem, 6.4vw, 2.3rem);
+  color: var(--roxo-900);
+}
+
+.jogo-descricao {
+  color: var(--texto-suave);
+  max-width: 64ch;
+}
+
+.jogo-corpo {
+  display: grid;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (min-width: 960px) {
+  .jogo-corpo {
+    grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  }
+}
+
+/* Painel de jogo (a rodada em si) */
+.painel {
+  display: grid;
+  gap: 18px;
+  padding: 24px 20px;
+  border-radius: var(--r-xl);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  box-shadow: var(--sombra-md);
+}
+
+@media (min-width: 640px) {
+  .painel {
+    padding: 30px 28px;
+  }
+}
+
+.painel__cabecalho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.contador-rodada {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  border-radius: var(--r-pill);
+  background: var(--destaque-claro);
+  color: var(--destaque);
+  font-family: var(--fonte-titulo);
+  font-weight: 800;
+  font-size: 0.92rem;
+}
+
+/* O grande cartão do desafio sorteado */
+.carta-desafio {
+  display: grid;
+  gap: 10px;
+  place-items: center;
+  text-align: center;
+  min-height: 190px;
+  padding: 28px 20px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(160deg, var(--destaque-claro), var(--superficie-2));
+  border: 1px solid var(--borda);
+}
+
+.carta-desafio__rotulo {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--destaque);
+}
+
+.carta-desafio__valor {
+  font-family: var(--fonte-titulo);
+  font-size: clamp(1.7rem, 7vw, 2.6rem);
+  font-weight: 800;
+  color: var(--roxo-900);
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.carta-desafio__valor--frase {
+  font-size: clamp(1.2rem, 4.6vw, 1.7rem);
+  line-height: 1.35;
+}
+
+.carta-desafio__nota {
+  color: var(--texto-suave);
+  font-size: 0.94rem;
+  max-width: 40ch;
+}
+
+/* Animação a cada novo sorteio */
+.trocou {
+  animation: trocar-carta 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes trocar-carta {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  60% {
+    transform: translateY(0) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Sequência C → S → Composto */
+.sequencia {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.sequencia__passo {
+  display: grid;
+  gap: 4px;
+  place-items: center;
+  padding: 16px 8px;
+  border-radius: var(--r-md);
+  background: var(--superficie-2);
+  border: 1px solid var(--borda);
+  text-align: center;
+}
+
+.sequencia__letra {
+  font-family: var(--fonte-titulo);
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: var(--destaque);
+}
+
+.sequencia__texto {
+  font-size: 0.78rem;
+  color: var(--texto-suave);
+  font-weight: 700;
+}
+
+/* Carta virada (Quem Sou Eu? e Mímica) */
+.carta-segredo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 190px;
+  padding: 26px 20px;
+  border-radius: var(--r-lg);
+  border: 2px dashed var(--borda-forte);
+  background: var(--superficie-2);
+  text-align: center;
+  transition: background var(--transicao), border-color var(--transicao);
+}
+
+.carta-segredo[data-revelada="true"] {
+  border-style: solid;
+  border-color: var(--destaque);
+  background: linear-gradient(160deg, var(--destaque-claro), var(--superficie-2));
+}
+
+.carta-segredo__aviso {
+  display: grid;
+  gap: 10px;
+  place-items: center;
+  color: var(--texto-suave);
+  font-weight: 700;
+}
+
+.carta-segredo__aviso span {
+  font-size: 42px;
+}
+
+/* Cronômetro da mímica */
+.cronometro {
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+}
+
+.cronometro__anel {
+  position: relative;
+  width: 180px;
+  height: 180px;
+}
+
+.cronometro__anel svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.cronometro__trilha {
+  fill: none;
+  stroke: var(--superficie-2);
+  stroke-width: 12;
+}
+
+.cronometro__progresso {
+  fill: none;
+  stroke: var(--destaque);
+  stroke-width: 12;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 300ms linear, stroke var(--transicao);
+}
+
+.cronometro__numero {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--fonte-titulo);
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--roxo-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.cronometro[data-estado="correndo"] .cronometro__numero {
+  animation: pulsar 1s ease-in-out infinite;
+}
+
+.cronometro[data-estado="acabou"] .cronometro__progresso {
+  stroke: var(--rosa-500);
+}
+
+.cronometro[data-estado="acabou"] .cronometro__numero {
+  color: var(--rosa-600);
+  animation: tremer 500ms ease-in-out 2;
+}
+
+@keyframes pulsar {
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes tremer {
+  25% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(6px);
+  }
+}
+
+.placar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-radius: var(--r-pill);
+  background: var(--superficie-2);
+  border: 1px solid var(--borda);
+}
+
+.placar__valor {
+  font-family: var(--fonte-titulo);
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--destaque);
+  min-width: 2ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.placar__botao {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--borda-forte);
+  background: var(--superficie);
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--roxo-700);
+  transition: background var(--transicao), transform var(--transicao);
+}
+
+.placar__botao:hover {
+  background: var(--roxo-50);
+}
+
+.placar__botao:active {
+  transform: scale(0.9);
+}
+
+/* Verdade ou desafio */
+.escolha-dupla {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.escolha-dupla .botao {
+  min-height: 64px;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 1.05rem;
+}
+
+.escolha-dupla .botao small {
+  font-family: var(--fonte-corpo);
+  font-weight: 700;
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+
+/* Lista de participantes */
+.participantes {
+  display: grid;
+  gap: 12px;
+}
+
+.participantes__campo {
+  display: flex;
+  gap: 8px;
+}
+
+.campo-texto {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  padding: 12px 16px;
+  border-radius: var(--r-md);
+  border: 2px solid var(--borda-forte);
+  background: var(--superficie);
+  font: inherit;
+  color: var(--texto);
+  transition: border-color var(--transicao);
+}
+
+.campo-texto::placeholder {
+  color: var(--texto-fraco);
+}
+
+.campo-texto:focus {
+  outline: none;
+  border-color: var(--roxo-500);
+}
+
+.participantes__lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+}
+
+.participante {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 14px;
+  border-radius: var(--r-pill);
+  background: var(--superficie-2);
+  border: 1px solid var(--borda);
+  font-weight: 700;
+  font-size: 0.92rem;
+  animation: entrar-tela 240ms ease both;
+}
+
+.participante[data-sorteado="true"] {
+  background: var(--destaque-claro);
+  border-color: var(--destaque);
+  color: var(--destaque);
+}
+
+.participante__remover {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--texto-suave);
+  font-size: 1rem;
+  line-height: 1;
+  transition: background var(--transicao), color var(--transicao);
+}
+
+.participante__remover:hover {
+  background: var(--rosa-100);
+  color: var(--rosa-600);
+}
+
+.aviso-vazio {
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  background: var(--amarelo-100);
+  color: #7c5b06;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+/* Ações do painel */
+.painel__acoes {
+  display: grid;
+  gap: 10px;
+}
+
+@media (min-width: 520px) {
+  .painel__acoes {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Coluna lateral: regras + dica */
+.lateral {
+  display: grid;
+  gap: 16px;
+}
+
+.cartao {
+  display: grid;
+  gap: 14px;
+  padding: 24px 22px;
+  border-radius: var(--r-xl);
+  background: var(--superficie);
+  border: 1px solid var(--borda);
+  box-shadow: var(--sombra-sm);
+}
+
+.cartao__titulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.14rem;
+  color: var(--roxo-900);
+}
+
+.lista-regras {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  counter-reset: regra;
+}
+
+.lista-regras li {
+  position: relative;
+  padding-left: 40px;
+  counter-increment: regra;
+  color: var(--texto-suave);
+  font-size: 0.96rem;
+}
+
+.lista-regras li::before {
+  content: counter(regra);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: var(--destaque-claro);
+  color: var(--destaque);
+  font-family: var(--fonte-titulo);
+  font-weight: 800;
+  font-size: 0.86rem;
+}
+
+.cartao--dica {
+  background: linear-gradient(150deg, var(--amarelo-100), #fffdf2);
+  border-color: #f7e9a8;
+}
+
+.cartao--dica p {
+  color: #7c5b06;
+  font-size: 0.95rem;
+}
+
+.cartao--sala {
+  background: linear-gradient(150deg, var(--roxo-50), #fff);
+}
+
+.dica-sala {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: var(--r-lg);
+  background: var(--roxo-50);
+  border: 1px dashed var(--borda-forte);
+}
+
+.dica-sala p {
+  color: var(--texto-suave);
+  font-size: 0.92rem;
+}
+
+.dica-sala strong {
+  color: var(--roxo-700);
+}
+
+.codigo-sala {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: var(--r-pill);
+  background: var(--superficie);
+  border: 1px solid var(--borda-forte);
+  font-family: var(--fonte-titulo);
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--roxo-700);
+}
+
+/* ------------------------------------------------- 10. Sorteio (overlay) */
+
+.sorteio {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  border: 0;
+  background: rgba(59, 7, 100, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: aparecer 200ms ease both;
+}
+
+.sorteio[hidden] {
+  display: none;
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+  }
+}
+
+.sorteio__caixa {
+  display: grid;
+  gap: 18px;
+  place-items: center;
+  width: min(420px, 100%);
+  padding: 38px 28px;
+  border-radius: var(--r-xl);
+  background: var(--superficie);
+  box-shadow: var(--sombra-lg);
+  text-align: center;
+  animation: entrar-caixa 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes entrar-caixa {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.94);
+  }
+}
+
+.sorteio__dado {
+  font-size: 76px;
+  line-height: 1;
+}
+
+.sorteio[data-fase="rolando"] .sorteio__dado {
+  animation: rolar 600ms cubic-bezier(0.36, 0, 0.24, 1) infinite;
+}
+
+@keyframes rolar {
+  0% {
+    transform: rotate(0) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.18);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+.sorteio__frase {
+  font-family: var(--fonte-titulo);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--texto-suave);
+  min-height: 1.6em;
+}
+
+.sorteio__resultado {
+  display: grid;
+  gap: 6px;
+  place-items: center;
+}
+
+.sorteio__nome {
+  font-family: var(--fonte-titulo);
+  font-size: 1.9rem;
+  font-weight: 800;
+  color: var(--roxo-900);
+  text-wrap: balance;
+}
+
+.sorteio__acoes {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+@media (min-width: 420px) {
+  .sorteio__acoes {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Confete simples, feito só com CSS */
+.confete {
+  position: absolute;
+  top: -12px;
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: cair 1.6s ease-in forwards;
+}
+
+@keyframes cair {
+  0% {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(60vh) rotate(540deg);
+  }
+}
+
+/* ---------------------------------------------------------- 11. Avisinho */
+
+.aviso {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--altura-nav) + env(safe-area-inset-bottom) + 16px);
+  z-index: 70;
+  transform: translate(-50%, 20px);
+  max-width: min(92vw, 420px);
+  padding: 13px 22px;
+  border-radius: var(--r-pill);
+  background: var(--roxo-900);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.92rem;
+  text-align: center;
+  box-shadow: var(--sombra-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transicao), transform var(--transicao);
+}
+
+@media (min-width: 960px) {
+  .aviso {
+    bottom: 28px;
+  }
+}
+
+.aviso.visivel {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ------------------------------------------------------------ 12. Rodapé */
+
+.rodape {
+  padding-block: 36px 16px;
+  text-align: center;
+  color: var(--texto-fraco);
+  font-size: 0.86rem;
+}
+
+.rodape strong {
+  color: var(--roxo-700);
+}
+
+/* ------------------------------------------------- 13. Menos movimento */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .carta-flutuante,
+  .card-sortear__dado {
+    animation: none;
+  }
+}

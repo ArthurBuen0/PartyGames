@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <title>Sorteia Aí — jogos rápidos para a turma</title>
+    <meta
+      name="description"
+      content="Acabou o o que vamos jogar? Sorteie uma brincadeira, junte a galera e divirtam-se: seis jogos rápidos para grupos de amigos, no celular ou pelo link da sala."
+    />
+
+    <meta name="theme-color" content="#6d28d9" />
+    <meta name="color-scheme" content="light" />
+    <link rel="manifest" href="manifest.webmanifest" />
+
+    <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Sorteia Aí" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Tipografia amigável; se a rede falhar, cai no stack do sistema -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="assets/css/estilos.css" />
+  </head>
+
+  <body>
+    <a class="pular-para-conteudo" href="#conteudo">Pular para o conteúdo</a>
+
+    <!-- ============================================================ Topo -->
+    <header class="cabecalho" id="cabecalho">
+      <div class="envoltorio cabecalho__interno">
+        <button class="marca" type="button" data-ir="inicio" aria-label="Sorteia Aí — ir para o início">
+          <span class="marca__dado" aria-hidden="true">🎲</span>
+          <span class="marca__nome">Sorteia Aí</span>
+        </button>
+
+        <nav class="nav-topo" aria-label="Navegação principal">
+          <button class="nav-topo__item" type="button" data-ir="inicio">Início</button>
+          <button class="nav-topo__item" type="button" data-ir="jogos">Jogos</button>
+          <button class="nav-topo__item" type="button" data-sortear>Sortear</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="conteudo" id="conteudo">
+      <!-- ================================================= Tela: início -->
+      <section class="tela" id="tela-inicio" aria-labelledby="titulo-inicio">
+        <div class="envoltorio">
+          <div class="heroi">
+            <div>
+              <p class="selo"><span aria-hidden="true">✨</span> Sem cadastro, sem instalação obrigatória</p>
+
+              <h1 class="heroi__titulo" id="titulo-inicio">
+                Acabou o <em>“o que vamos jogar?”</em>
+              </h1>
+
+              <p class="heroi__texto">
+                O Sorteia Aí ajuda a sua turma a escolher e jogar brincadeiras em grupo em segundos.
+                A gente sorteia o jogo, mostra as regras e conduz cada rodada — vocês só precisam
+                estar juntos, na mesma mesa ou pelo link da sala.
+              </p>
+
+              <div class="heroi__acoes">
+                <button class="botao botao--principal botao--grande" type="button" data-ir="jogos">
+                  Ver jogos
+                </button>
+                <button class="botao botao--secundario botao--grande" type="button" data-sortear>
+                  <span class="botao__emoji" aria-hidden="true">🎲</span> Sortear um jogo
+                </button>
+              </div>
+            </div>
+
+            <div class="heroi__arte" aria-hidden="true">
+              <div class="carta-flutuante"><span>🎭</span><span>Mímica</span></div>
+              <div class="carta-flutuante"><span>🕵️</span><span>Quem Sou Eu?</span></div>
+              <div class="carta-flutuante"><span>🔤</span><span>C, S, Composto</span></div>
+            </div>
+          </div>
+
+          <!-- Os três passos -->
+          <h2 class="apenas-leitor">Como funciona</h2>
+          <div class="passos">
+            <article class="passo" data-cor="roxo">
+              <span class="passo__numero" aria-hidden="true">1</span>
+              <span class="passo__icone" aria-hidden="true">🎲</span>
+              <h3>Sorteie</h3>
+              <p>
+                Deixe o dado decidir ou escolha na lista. Em um toque a turma para de discutir e
+                começa a jogar.
+              </p>
+            </article>
+
+            <article class="passo" data-cor="rosa">
+              <span class="passo__numero" aria-hidden="true">2</span>
+              <span class="passo__icone" aria-hidden="true">👯</span>
+              <h3>Joguem juntos</h3>
+              <p>
+                Um celular no meio da roda já basta. Se preferirem, cada um abre o link da sala e
+                acompanha pela própria tela.
+              </p>
+            </article>
+
+            <article class="passo" data-cor="amarelo">
+              <span class="passo__numero" aria-hidden="true">3</span>
+              <span class="passo__icone" aria-hidden="true">🎉</span>
+              <h3>Divirtam-se</h3>
+              <p>
+                Regras na tela, desafios novos a cada rodada e cronômetro quando o jogo pede. Sem
+                papelzinho, sem confusão.
+              </p>
+            </article>
+          </div>
+
+          <div class="faixa-cta">
+            <h2>Seis brincadeiras prontas para a próxima roda</h2>
+            <p>
+              De mímica a duas verdades e uma mentira. Escolha uma, ou deixe o sorteio resolver por
+              vocês.
+            </p>
+            <button class="botao botao--secundario botao--grande" type="button" data-ir="jogos">
+              Ver jogos
+            </button>
+          </div>
+
+          <footer class="rodape">
+            <p>Feito para jogar junto. <strong>Sorteia Aí</strong> · MVP sem backend</p>
+          </footer>
+        </div>
+      </section>
+
+      <!-- ================================================== Tela: jogos -->
+      <section class="tela" id="tela-jogos" hidden aria-labelledby="titulo-jogos">
+        <div class="envoltorio">
+          <div class="secao-topo">
+            <div class="secao-topo__linha">
+              <div>
+                <h2 id="titulo-jogos">Escolha a brincadeira</h2>
+                <p>
+                  Toque em um card para abrir as regras e começar a rodada. Se a turma não se
+                  decidir, o dado decide.
+                </p>
+              </div>
+              <button class="botao botao--rosa" type="button" data-sortear>
+                <span class="botao__emoji" aria-hidden="true">🎲</span> Sortear para mim
+              </button>
+            </div>
+          </div>
+
+          <!-- Cards preenchidos por app.js a partir de dados.js -->
+          <div class="grade-jogos" id="grade-jogos"></div>
+
+          <footer class="rodape">
+            <p>Todos os jogos funcionam offline depois da primeira visita.</p>
+          </footer>
+        </div>
+      </section>
+
+      <!-- ============================================ Tela: jogo aberto -->
+      <section class="tela" id="tela-jogo" hidden aria-labelledby="titulo-jogo">
+        <div class="envoltorio" id="conteudo-jogo">
+          <!-- montado por app.js -->
+        </div>
+      </section>
+    </main>
+
+    <!-- ================================================= Barra inferior -->
+    <nav class="nav-inferior" aria-label="Navegação principal">
+      <button class="nav-inferior__item" type="button" data-ir="inicio">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 10.5 12 3l9 7.5" />
+          <path d="M5 9.5V20h14V9.5" />
+          <path d="M10 20v-6h4v6" />
+        </svg>
+        Início
+      </button>
+
+      <button class="nav-inferior__item" type="button" data-ir="jogos">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2.5" y="6.5" width="19" height="11" rx="5.5" />
+          <path d="M8 9.5v4M6 11.5h4M15.5 10.5h.01M18 13.5h.01" />
+        </svg>
+        Jogos
+      </button>
+
+      <button class="nav-inferior__item" type="button" data-sortear>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+          <path d="M8.5 8.5h.01M15.5 8.5h.01M12 12h.01M8.5 15.5h.01M15.5 15.5h.01" />
+        </svg>
+        Sortear
+      </button>
+    </nav>
+
+    <!-- ============================================== Overlay do sorteio -->
+    <div class="sorteio" id="sorteio" hidden role="dialog" aria-modal="true" aria-labelledby="sorteio-frase">
+      <div class="sorteio__caixa">
+        <span class="sorteio__dado" id="sorteio-dado" aria-hidden="true">🎲</span>
+        <p class="sorteio__frase" id="sorteio-frase" role="status" aria-live="polite">Rolando o dado…</p>
+
+        <div class="sorteio__resultado" id="sorteio-resultado" hidden>
+          <span class="sorteio__nome" id="sorteio-nome"></span>
+          <p class="carta-desafio__nota" id="sorteio-resumo"></p>
+        </div>
+
+        <div class="sorteio__acoes" id="sorteio-acoes" hidden>
+          <button class="botao botao--principal" type="button" id="sorteio-jogar">Bora jogar</button>
+          <button class="botao botao--secundario" type="button" id="sorteio-de-novo">Sortear de novo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================= Avisinho -->
+    <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
+
+    <script src="assets/js/dados.js"></script>
+    <script src="assets/js/app.js"></script>
+  </body>
+</html>

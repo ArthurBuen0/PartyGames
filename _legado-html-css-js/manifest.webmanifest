@@ -1,0 +1,54 @@
+{
+  "id": "/sorteia-ai/",
+  "name": "Sorteia Aí — jogos rápidos para a turma",
+  "short_name": "Sorteia Aí",
+  "description": "Acabou o \"o que vamos jogar?\". Sorteie uma brincadeira, junte a galera e divirtam-se: seis jogos rápidos para grupos de amigos.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#faf7ff",
+  "theme_color": "#6d28d9",
+  "categories": ["games", "entertainment", "social"],
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "assets/icons/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Sortear um jogo",
+      "short_name": "Sortear",
+      "description": "Deixa o dado escolher a brincadeira da vez",
+      "url": "./?acao=sortear#/jogos"
+    },
+    {
+      "name": "Ver todos os jogos",
+      "short_name": "Jogos",
+      "description": "Abre a lista completa de brincadeiras",
+      "url": "./#/jogos"
+    }
+  ]
+}
