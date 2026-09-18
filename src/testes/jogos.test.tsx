@@ -29,41 +29,94 @@ function renderizar(props: PropsJogo, id: keyof typeof MODULOS) {
 /* ===================================================== C, S, Composto */
 
 describe("C, S, Composto", () => {
-  const estadoBase = (euId: string) =>
+  const preparando = (euId: string) =>
     montarEstado("c-s-composto", {
-      estado: { categoria: "Frutas", sequencia: ["C", "S", "Composto"], indice: 1, voltas: 0 },
+      fase: "preparando",
+      estado: {
+        historico: [{ palavra: "Praia", autor: null, autor_id: null }],
+        meta_rodadas: 10,
+        rodada_atual: 0,
+        prontos: [IDS.ana],
+        total_prontos: 4
+      },
       vez_de: IDS.ana,
-      turno_fim: new Date(Date.now() + 5000).toISOString()
+      turno_fim: null
     }, { euId });
 
-  it("mostra a categoria e a regra da vez para todo mundo", () => {
-    renderizar(montarProps(estadoBase(IDS.bruno)), "c-s-composto");
-    expect(screen.getByText("Frutas")).toBeTruthy();
-    expect(screen.getByText(/É a vez de Ana/)).toBeTruthy();
+  const emAndamento = (euId: string) =>
+    montarEstado("c-s-composto", {
+      fase: "em_andamento",
+      estado: {
+        palavra_atual: "Areia",
+        historico: [
+          { palavra: "Praia", autor: null, autor_id: null },
+          { palavra: "Areia", autor: "Ana", autor_id: IDS.ana }
+        ],
+        meta_rodadas: 10,
+        rodada_atual: 1
+      },
+      vez_de: IDS.bruno,
+      turno_fim: new Date(Date.now() + 10000).toISOString()
+    }, { euId });
+
+  const votando = (euId: string) =>
+    montarEstado("c-s-composto", {
+      fase: "votacao",
+      estado: {
+        historico: [
+          { palavra: "Praia", autor: null, autor_id: null },
+          { palavra: "Areia", autor: "Ana", autor_id: IDS.ana }
+        ],
+        avaliacoes_feitas: 0,
+        avaliacoes_esperadas: 3
+      },
+      vez_de: null,
+      turno_fim: new Date(Date.now() + 120000).toISOString()
+    }, { euId });
+
+  it("ninguém começa a cadeia antes de todo mundo confirmar pronto", () => {
+    renderizar(montarProps(preparando(IDS.bruno)), "c-s-composto");
+    expect(screen.getByText("1/4")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Estou pronto/ })).toBeTruthy();
   });
 
-  it("só quem está na vez recebe o botão de avançar", () => {
-    const { unmount } = renderizar(montarProps(estadoBase(IDS.ana)), "c-s-composto");
-    expect(screen.getByRole("button", { name: /Próximo jogador/ })).toBeTruthy();
+  it("quem já confirmou vê o botão desabilitado", () => {
+    renderizar(montarProps(preparando(IDS.ana)), "c-s-composto");
+    const botao = screen.getByRole("button", { name: /Aguardando os outros/ });
+    expect((botao as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("mostra a cadeia para todo mundo, mas o campo só é de quem está na vez", () => {
+    const { unmount } = renderizar(montarProps(emAndamento(IDS.carla)), "c-s-composto");
+    expect(screen.getAllByText("Areia").length).toBeGreaterThan(0);
+    expect(screen.getByText("Praia")).toBeTruthy();
+    expect(screen.queryByLabelText(/Sua palavra/)).toBeNull();
     unmount();
 
-    renderizar(montarProps(estadoBase(IDS.bruno)), "c-s-composto");
-    expect(screen.queryByRole("button", { name: /Próximo jogador/ })).toBeNull();
+    renderizar(montarProps(emAndamento(IDS.bruno)), "c-s-composto");
+    expect(screen.getByLabelText(/Sua palavra/)).toBeTruthy();
   });
 
-  it("marca a regra atual da sequência", () => {
-    renderizar(montarProps(estadoBase(IDS.ana)), "c-s-composto");
-    const passoAtual = screen.getByText("S").closest("li");
-    expect(passoAtual?.getAttribute("aria-current")).toBe("step");
-  });
-
-  it("avisa o servidor quando o cronômetro zera", async () => {
-    const props = montarProps(estadoBase(IDS.ana), [], 0);
+  it("avisa o servidor quando o cronômetro da vez zera", async () => {
+    const props = montarProps(emAndamento(IDS.bruno), [], 0);
     vi.useFakeTimers();
     renderizar(props, "c-s-composto");
     await vi.advanceTimersByTimeAsync(600);
     vi.useRealTimers();
     expect(props.acao).toHaveBeenCalled();
+  });
+
+  it("na votação, ninguém avalia a própria palavra", () => {
+    renderizar(montarProps(votando(IDS.ana)), "c-s-composto");
+    expect(screen.getByText(/você não avalia a sua/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Valeu/ })).toBeNull();
+  });
+
+  it("os outros veem as três opções de voto para a palavra alheia", () => {
+    renderizar(montarProps(votando(IDS.bruno)), "c-s-composto");
+    expect(screen.getByRole("button", { name: /Valeu/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Neutro/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Não valeu/ })).toBeTruthy();
   });
 });
 
@@ -412,5 +465,174 @@ describe("Cara a Cara", () => {
     renderizar(montarProps(semMinhaMesa), "cara-a-cara");
     expect(screen.getByText(/Você está de fora nesta rodada/)).toBeTruthy();
     expect(screen.getByText("Mesa 1")).toBeTruthy();
+  });
+});
+
+/* =============================================================== Cronômetro */
+
+describe("Cronômetro", () => {
+  const estadoBase = (euId: string, jaMandou = false) =>
+    montarEstado("cronometro", {
+      estado: {
+        resultados: jaMandou
+          ? [{ participante_id: IDS.ana, apelido: "Ana", alvo_ms: 5000, tempo_ms: 5010, erro_ms: 10 }]
+          : [],
+        total_jogadores: 4
+      },
+      vez_de: null,
+      turno_fim: new Date(Date.now() + 60000).toISOString()
+    }, { euId });
+
+  it("mostra o alvo privado antes de começar", () => {
+    const privados = [privado(IDS.ana, "alvo_tempo", { alvo_ms: 7482 })];
+    renderizar(montarProps(estadoBase(IDS.ana), privados), "cronometro");
+    expect(screen.getByText(/7\.482/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Iniciar" })).toBeTruthy();
+  });
+
+  it("não mostra o alvo de ninguém para quem não é dono", () => {
+    renderizar(montarProps(estadoBase(IDS.bruno)), "cronometro");
+    expect(screen.queryByText(/7\.482/)).toBeNull();
+  });
+
+  it("depois de mandar, mostra o resultado e quantos já jogaram", () => {
+    renderizar(montarProps(estadoBase(IDS.ana, true)), "cronometro");
+    expect(screen.getByText(/Você parou em/)).toBeTruthy();
+    expect(screen.getByText(/1\/4/)).toBeTruthy();
+  });
+});
+
+/* ========================================================= Desenho Telefone */
+
+describe("Desenho Telefone", () => {
+  it("no passo de desenho, mostra a frase anterior e a área de desenho", () => {
+    const estado = montarEstado("desenho-telefone", {
+      estado: {
+        passo_atual: 1, total_passos: 4, total_jogadores: 4, tipo_passo: "desenho", enviaram: []
+      },
+      vez_de: null,
+      turno_fim: new Date(Date.now() + 90000).toISOString()
+    }, { euId: IDS.bruno });
+
+    const privados = [
+      privado(IDS.bruno, "tarefa_desenho", {
+        caderno: 0, passo: 1, tipo: "desenho", anterior: { texto: "um gato surfando" }
+      })
+    ];
+
+    renderizar(montarProps(estado, privados), "desenho-telefone");
+    expect(screen.getByText(/um gato surfando/)).toBeTruthy();
+    expect(screen.getByLabelText(/Área de desenho/)).toBeTruthy();
+  });
+
+  it("no passo de legenda, mostra o desenho anterior só para leitura e o campo de texto", () => {
+    const estado = montarEstado("desenho-telefone", {
+      estado: {
+        passo_atual: 2, total_passos: 4, total_jogadores: 4, tipo_passo: "frase", enviaram: []
+      },
+      vez_de: null
+    }, { euId: IDS.carla });
+
+    const privados = [
+      privado(IDS.carla, "tarefa_desenho", {
+        caderno: 1, passo: 2, tipo: "frase",
+        anterior: { tracos: [{ cor: "#000000", pontos: [[10, 10], [20, 20]] }] }
+      })
+    ];
+
+    renderizar(montarProps(estado, privados), "desenho-telefone");
+    expect(screen.getByLabelText("Desenho")).toBeTruthy();
+    expect(screen.getByLabelText(/Escreva uma frase que descreva/)).toBeTruthy();
+  });
+
+  it("depois de mandar a etapa, mostra a tela de espera com o progresso", () => {
+    const estado = montarEstado("desenho-telefone", {
+      estado: {
+        passo_atual: 1, total_passos: 4, total_jogadores: 4, tipo_passo: "desenho",
+        enviaram: [IDS.bruno]
+      },
+      vez_de: null,
+      turno_fim: new Date(Date.now() + 90000).toISOString()
+    }, { euId: IDS.bruno });
+
+    renderizar(montarProps(estado), "desenho-telefone");
+    expect(screen.getByText("Mandado!")).toBeTruthy();
+    expect(screen.getByText(/1\/4/)).toBeTruthy();
+  });
+});
+
+/* =============================================================== Code Names */
+
+describe("Code Names", () => {
+  const preparando = (euId: string, timeDe: Record<string, "A" | "B"> = {}) =>
+    montarEstado("code-names", {
+      fase: "preparando",
+      estado: { time_de: timeDe, spymaster_a: null, spymaster_b: null },
+      vez_de: null
+    }, { euId });
+
+  it("mostra os dois times e deixa entrar em um deles", () => {
+    renderizar(montarProps(preparando(IDS.ana)), "code-names");
+    expect(screen.getByRole("button", { name: "Entrar no Time A" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Entrar no Time B" })).toBeTruthy();
+  });
+
+  it("quem já está no time vê o botão de virar Spymaster", () => {
+    renderizar(
+      montarProps(preparando(IDS.ana, { [IDS.ana]: "A", [IDS.bruno]: "A" })),
+      "code-names"
+    );
+    expect(screen.getByText("Você está aqui")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Serei o Spymaster" })).toBeTruthy();
+  });
+
+  const jogando = (euId: string, timeDaVez: "A" | "B", dicaAtual: { palavra: string; numero: number; por: string } | null = null) =>
+    montarEstado("code-names", {
+      fase: "em_andamento",
+      estado: {
+        time_de: { [IDS.ana]: "A", [IDS.bruno]: "A", [IDS.carla]: "B", [IDS.davi]: "B" },
+        spymaster_a: IDS.ana,
+        spymaster_b: IDS.carla,
+        time_da_vez: timeDaVez,
+        dica_atual: dicaAtual,
+        palpites_restantes: dicaAtual ? 2 : null,
+        restantes: { A: 9, B: 8 },
+        palavras: [
+          { indice: 0, texto: "Gato", revelada: false, cor: null },
+          { indice: 1, texto: "Praia", revelada: false, cor: null }
+        ]
+      },
+      vez_de: null
+    }, { euId });
+
+  it("o Spymaster do time da vez vê o formulário de dica quando ainda não há dica", () => {
+    renderizar(montarProps(jogando(IDS.ana, "A")), "code-names");
+    expect(screen.getByLabelText("Sua dica")).toBeTruthy();
+  });
+
+  it("quem não é Spymaster não vê o formulário de dica, só a espera", () => {
+    renderizar(montarProps(jogando(IDS.bruno, "A")), "code-names");
+    expect(screen.queryByLabelText("Sua dica")).toBeNull();
+    expect(screen.getByText(/Aguardando o Spymaster/)).toBeTruthy();
+  });
+
+  it("com dica na mesa, quem não é Spymaster do time da vez pode apontar palavra", () => {
+    const dica = { palavra: "ANIMAL", numero: 2, por: "Ana" };
+    renderizar(montarProps(jogando(IDS.bruno, "A", dica)), "code-names");
+    const botaoGato = screen.getByRole("button", { name: /Gato/ }) as HTMLButtonElement;
+    expect(botaoGato.disabled).toBe(false);
+  });
+
+  it("o Spymaster não aponta palavra mesmo com dica na mesa", () => {
+    const dica = { palavra: "ANIMAL", numero: 2, por: "Ana" };
+    renderizar(montarProps(jogando(IDS.ana, "A", dica)), "code-names");
+    const botaoGato = screen.getByRole("button", { name: /Gato/ }) as HTMLButtonElement;
+    expect(botaoGato.disabled).toBe(true);
+  });
+
+  it("o Spymaster vê um aviso de que enxerga as cores verdadeiras", () => {
+    const privados = [privado(IDS.ana, "mapa_secreto", { cores: ["A", "bomba"] })];
+    renderizar(montarProps(jogando(IDS.ana, "A"), privados), "code-names");
+    expect(screen.getByText(/você vê as cores verdadeiras/i)).toBeTruthy();
   });
 });

@@ -196,77 +196,129 @@ await esperaErro(() => rpc(UID.bruno, `remover_participante($1)`, [P.davi]),
 /* 2. C, S, COMPOSTO                                                         */
 /* ========================================================================= */
 
-grupo("C, S, Composto: turnos de 5s e eliminação");
+grupo("C, S, Composto: prontos, cadeia de 10s e votação anônima");
 
-let r = await rpc(UID.ana, `iniciar_partida($1, 'c-s-composto')`, [salaId]);
+let r = await rpc(UID.ana, `iniciar_partida($1, 'c-s-composto', $2)`,
+  [salaId, JSON.stringify({ rodadas: 4 })]);
 let rodadaId = r.rodada_id;
 
 let rod = (await admin(`select * from rodadas where id = $1`, [rodadaId]))[0];
-ok(!!rod.estado.categoria, `categoria sorteada: "${rod.estado.categoria}"`);
-ok(rod.estado.indice === 0 && rod.estado.sequencia.join(",") === "C,S,Composto",
-  "sequência começa em C");
+ok(rod.fase === "preparando", "começa esperando todo mundo confirmar pronto");
+ok(rod.estado.meta_rodadas === 4, "número de rodadas veio da config do anfitrião");
+ok(rod.estado.historico.length === 1 && rod.estado.historico[0].autor_id === null,
+  `cadeia começa com a palavra sorteada: "${rod.estado.historico[0].palavra}"`);
+ok(rod.turno_fim === null, "cronômetro não corre antes de todo mundo estar pronto");
+
+await esperaErro(() => rpc(UID.ana, `csc_enviar_palavra($1, $2)`, [rodadaId, "Areia"]),
+  "RODADA_NAO_ESTA_ABERTA", "não dá para escrever antes da cadeia abrir");
+
+await rpc(UID.ana, `csc_marcar_pronto($1)`, [rodadaId]);
+await rpc(UID.bruno, `csc_marcar_pronto($1)`, [rodadaId]);
+await rpc(UID.carla, `csc_marcar_pronto($1)`, [rodadaId]);
+rod = (await admin(`select * from rodadas where id = $1`, [rodadaId]))[0];
+ok(rod.fase === "preparando" && rod.estado.prontos.length === 3,
+  "ainda espera o último confirmar");
+
+await rpc(UID.davi, `csc_marcar_pronto($1)`, [rodadaId]);
+rod = (await admin(`select * from rodadas where id = $1`, [rodadaId]))[0];
+const janela = (new Date(rod.turno_fim) - new Date(rod.turno_inicio)) / 1000;
+ok(rod.fase === "em_andamento" && janela === 10,
+  `todo mundo pronto: cadeia libera com ${janela}s por vez`);
 ok(rod.vez_de === P.ana, "a vez começa com a anfitriã");
 
-const janela = (new Date(rod.turno_fim) - new Date(rod.turno_inicio)) / 1000;
-ok(janela === 5, `cronômetro do servidor: ${janela}s`);
+await esperaErro(() => rpc(UID.bruno, `csc_enviar_palavra($1, $2)`, [rodadaId, "Areia"]),
+  "NAO_E_SUA_VEZ", "quem não está na vez não escreve na cadeia");
 
-await esperaErro(() => rpc(UID.bruno, `avancar_turno($1)`, [rodadaId]),
-  "NAO_E_SUA_VEZ", "quem não está na vez não avança o turno");
+await rpc(UID.ana, `csc_enviar_palavra($1, $2)`, [rodadaId, "Areia"]);
+rod = (await admin(`select * from rodadas where id = $1`, [rodadaId]))[0];
+ok(rod.estado.rodada_atual === 1 && rod.vez_de === P.bruno,
+  "primeira palavra entrou na cadeia e a vez passou para Bruno");
 
-await esperaErro(() => rpc(UID.bruno, `registrar_timeout($1)`, [rodadaId]),
+const enviosPalavraCsc = await como(UID.carla,
+  `select conteudo from envios where rodada_id = $1 and tipo = 'palavra'`, [rodadaId]);
+ok(enviosPalavraCsc.length === 1, "a palavra fica registrada e visível para a sala inteira");
+
+await rpc(UID.bruno, `csc_enviar_palavra($1, $2)`, [rodadaId, "Onda"]);
+rod = (await admin(`select * from rodadas where id = $1`, [rodadaId]))[0];
+ok(rod.estado.rodada_atual === 2 && rod.vez_de === P.carla, "segunda palavra, vez da Carla");
+
+// Carla deixa o tempo acabar — ninguém é punido, só passa a vez
+await estourarTempo(rodadaId);
+await esperaErro(() => rpc(UID.davi, `csc_enviar_palavra($1, $2)`, [rodadaId, "Vento"]),
+  "NAO_E_SUA_VEZ", "Davi ainda não está na vez enquanto o tempo da Carla não estoura");
+await rpc(UID.bruno, `csc_registrar_timeout($1)`, [rodadaId]);
+rod = (await admin(`select * from rodadas where id = $1`, [rodadaId]))[0];
+ok(rod.estado.rodada_atual === 2 && rod.vez_de === P.davi,
+  "estourou o tempo: pula a vez sem contar como rodada e sem eliminar");
+
+const carlaSegueAtiva = await admin(`select eliminado from participantes where id = $1`, [P.carla]);
+ok(carlaSegueAtiva[0].eliminado === false, "C, S, Composto não elimina ninguém");
+
+await esperaErro(() => rpc(UID.bruno, `csc_registrar_timeout($1)`, [rodadaId]),
   "AINDA_TEM_TEMPO", "não dá para forçar o fim do tempo antes da hora");
 
-await rpc(UID.ana, `avancar_turno($1)`, [rodadaId]);
+await rpc(UID.davi, `csc_enviar_palavra($1, $2)`, [rodadaId, "Furacão"]);
 rod = (await admin(`select * from rodadas where id = $1`, [rodadaId]))[0];
-ok(rod.vez_de === P.bruno, "a vez passou para Bruno");
-ok(rod.estado.indice === 1, "a regra virou S");
+ok(rod.estado.rodada_atual === 3 && rod.vez_de === P.ana, "terceira palavra, a roda volta para Ana");
 
-await rpc(UID.bruno, `avancar_turno($1)`, [rodadaId]);
+// Última palavra: fecha a cadeia (meta = 4) e abre a votação
+await rpc(UID.ana, `csc_enviar_palavra($1, $2)`, [rodadaId, "Maré"]);
 rod = (await admin(`select * from rodadas where id = $1`, [rodadaId]))[0];
-ok(rod.estado.indice === 2, "a regra virou Composto");
-ok(rod.vez_de === P.carla, "a vez passou para Carla");
+ok(rod.fase === "votacao" && rod.estado.rodada_atual === 4 && rod.estado.historico.length === 5,
+  "quarta palavra fecha a cadeia e abre a votação anônima");
 
-// Carla deixa o tempo acabar
-await estourarTempo(rodadaId);
-await rpc(UID.bruno, `registrar_timeout($1)`, [rodadaId]);
+await esperaErro(() => rpc(UID.ana, `csc_avaliar_palavra($1, 1, 'valeu')`, [rodadaId]),
+  "AUTOR_NAO_AVALIA", "quem escreveu a palavra não vota nela");
+await esperaErro(() => rpc(UID.bruno, `csc_avaliar_palavra($1, 1, 'talvez')`, [rodadaId]),
+  "VALOR_INVALIDO", "só vale valeu, não_valeu ou neutro");
+await esperaErro(() => rpc(UID.bruno, `csc_avaliar_palavra($1, 99, 'valeu')`, [rodadaId]),
+  "INDICE_INVALIDO", "índice fora da cadeia é recusado");
+await esperaErro(() => rpc(UID.bruno, `csc_avaliar_palavra($1, 0, 'valeu')`, [rodadaId]),
+  "PALAVRA_SEM_AUTOR", "a palavra semente (sem autor) não entra na votação");
+
+// índice 1 = "Areia" (Ana): maioria "valeu" → +1
+await rpc(UID.bruno, `csc_avaliar_palavra($1, 1, 'valeu')`, [rodadaId]);
+await rpc(UID.carla, `csc_avaliar_palavra($1, 1, 'valeu')`, [rodadaId]);
+await rpc(UID.davi, `csc_avaliar_palavra($1, 1, 'valeu')`, [rodadaId]);
+
+// índice 2 = "Onda" (Bruno): maioria "não valeu" → -1
+await rpc(UID.ana, `csc_avaliar_palavra($1, 2, 'nao_valeu')`, [rodadaId]);
+await rpc(UID.carla, `csc_avaliar_palavra($1, 2, 'nao_valeu')`, [rodadaId]);
+await rpc(UID.davi, `csc_avaliar_palavra($1, 2, 'valeu')`, [rodadaId]);
+
+// índice 3 = "Furacão" (Davi): tudo neutro → empate, 0
+await rpc(UID.ana, `csc_avaliar_palavra($1, 3, 'neutro')`, [rodadaId]);
+await rpc(UID.bruno, `csc_avaliar_palavra($1, 3, 'neutro')`, [rodadaId]);
+await rpc(UID.carla, `csc_avaliar_palavra($1, 3, 'neutro')`, [rodadaId]);
+
 rod = (await admin(`select * from rodadas where id = $1`, [rodadaId]))[0];
-ok(rod.fase === "resultado" && rod.resultado.perdedor === "Carla",
-  `tempo esgotado: ${rod.resultado.perdedor} perdeu a rodada`);
+ok(rod.fase === "votacao" && rod.estado.avaliacoes_feitas === 9,
+  "a mesa vê o progresso da votação sem saber quem votou o quê");
 
-await esperaErro(() => rpc(UID.bruno, `confirmar_eliminacao($1)`, [rodadaId]),
-  "SO_O_ANFITRIAO", "só a anfitriã confirma a eliminação");
-
-// A mesa perdoou: reinicia sem eliminar
-await rpc(UID.ana, `reiniciar_turno($1)`, [rodadaId]);
-rod = (await admin(`select * from rodadas where id = $1`, [rodadaId]))[0];
-const carlaViva = await admin(`select eliminado from participantes where id = $1`, [P.carla]);
-ok(rod.fase === "em_andamento" && carlaViva[0].eliminado === false,
-  "anfitriã pode perdoar: ninguém sai e o turno recomeça");
-
-// Agora vale de verdade
-await estourarTempo(rodadaId);
-await rpc(UID.ana, `registrar_timeout($1)`, [rodadaId]);
-let res = await rpc(UID.ana, `confirmar_eliminacao($1)`, [rodadaId]);
-const carlaFora = await admin(`select eliminado from participantes where id = $1`, [P.carla]);
-ok(carlaFora[0].eliminado === true, "Carla foi eliminada");
-ok(res.fim === false && res.restantes === 3, `seguem ${res.restantes} em jogo`);
+// índice 4 = "Maré" (Ana), último voto fecha a votação e revela sozinho
+await rpc(UID.bruno, `csc_avaliar_palavra($1, 4, 'valeu')`, [rodadaId]);
+await rpc(UID.carla, `csc_avaliar_palavra($1, 4, 'nao_valeu')`, [rodadaId]);
+await rpc(UID.davi, `csc_avaliar_palavra($1, 4, 'valeu')`, [rodadaId]);
 
 rod = (await admin(`select * from rodadas where id = $1`, [rodadaId]))[0];
-ok(rod.vez_de !== P.carla, "a roda pula quem foi eliminado");
+ok(rod.fase === "resultado", "última avaliação revela a votação sozinha");
 
-// Elimina até sobrar uma
-for (let i = 0; i < 2; i += 1) {
-  await estourarTempo(rodadaId);
-  await rpc(UID.ana, `registrar_timeout($1)`, [rodadaId]);
-  res = await rpc(UID.ana, `confirmar_eliminacao($1)`, [rodadaId]);
-}
-ok(res.fim === true && !!res.vencedor, `partida terminou com vencedor: ${res.vencedor}`);
+const porIndice = Object.fromEntries(rod.resultado.avaliacoes.map((a) => [a.indice, a]));
+ok(porIndice[1].delta === 1, `"Areia" valeu (3x valeu, 0x não valeu) → +1`);
+ok(porIndice[2].delta === -1, `"Onda" não valeu (2x não valeu, 1x valeu) → -1`);
+ok(porIndice[3].delta === 0, `"Furacão" empatou em neutro → 0`);
+ok(porIndice[4].delta === 1, `"Maré" valeu (2x valeu, 1x não valeu) → +1`);
 
-const pontosVencedor = await admin(
-  `select pontos, apelido from participantes where sala_id = $1 and not eliminado and saiu_em is null`,
-  [salaId]
-);
-ok(pontosVencedor[0]?.pontos === 1, "o vencedor levou 1 ponto");
+const avaliacoesReveladas = await como(UID.bruno,
+  `select valor from avaliacoes where rodada_id = $1`, [rodadaId]);
+ok(avaliacoesReveladas.length === 12, "depois da revelação todas as avaliações ficam visíveis");
+
+const placarCSC = Object.fromEntries((await admin(
+  `select apelido, pontos from participantes where sala_id = $1`, [salaId]))
+  .map((l) => [l.apelido, l.pontos]));
+ok(placarCSC.Ana === 2, `Ana somou os dois "+1" das palavras dela (Ana: ${placarCSC.Ana})`);
+ok(placarCSC.Bruno === -1, `Bruno perdeu 1 ponto pela palavra que não valeu (Bruno: ${placarCSC.Bruno})`);
+ok(placarCSC.Davi === 0, `Davi empatou em neutro, sem pontos (Davi: ${placarCSC.Davi})`);
 
 /* ========================================================================= */
 /* 3. PALAVRA PARECIDA                                                       */
@@ -337,6 +389,8 @@ const nomeDoBruno = (await admin(
   `select conteudo->>'nome' n from estados_privados where rodada_id = $1 and dono_id = $2`,
   [rodadaId, P.bruno]))[0].n;
 
+const pontosBrunoAntes = (await admin(`select pontos from participantes where id = $1`, [P.bruno]))[0].pontos;
+
 const palpiteCerto = await rpc(UID.bruno, `quem_sou_eu_palpite($1, $2)`,
   [rodadaId, nomeDoBruno.toUpperCase()]);
 ok(palpiteCerto.acertou === true, `acertou "${nomeDoBruno}" mesmo digitando em CAIXA ALTA`);
@@ -347,7 +401,7 @@ const brunoAgoraVe = await como(UID.bruno,
 ok(brunoAgoraVe.length === 1, "depois de acertar, a pessoa passa a ver a própria identidade");
 
 const pontosBruno = await admin(`select pontos from participantes where id = $1`, [P.bruno]);
-ok(pontosBruno[0].pontos >= 1, "quem acertou ganhou ponto");
+ok(pontosBruno[0].pontos === pontosBrunoAntes + 1, "quem acertou ganhou ponto");
 
 /* ========================================================================= */
 /* 5. MÍMICA                                                                 */
@@ -596,6 +650,323 @@ const acertouPalpite = await rpc(uidDoA, `cara_a_cara_palpite($1, $2)`, [duelo2.
 d = (await admin(`select * from duelos where id = $1`, [duelo2.id]))[0];
 ok(acertouPalpite.acertou === true && d.vencedor_id === duelo2.jogador_a,
   `palpite certeiro vence a mesa ("${acertouPalpite.personagem}")`);
+
+/* ========================================================================= */
+/* 8-B. CRONÔMETRO                                                          */
+/* ========================================================================= */
+
+grupo("Cronômetro: alvo privado, tempo mandado pelo cliente, erro calculado no banco");
+
+const pontosAnaAntesCron = (await admin(`select pontos from participantes where id = $1`, [P.ana]))[0].pontos;
+
+r = await rpc(UID.ana, `iniciar_partida($1, 'cronometro')`, [salaId]);
+let rodadaCron = r.rodada_id;
+
+let rodCron = (await admin(`select * from rodadas where id = $1`, [rodadaCron]))[0];
+ok(rodCron.fase === "em_andamento" && rodCron.vez_de === null,
+  "todo mundo joga junto, sem vez");
+
+const janelaCron = (new Date(rodCron.turno_fim) - new Date(rodCron.turno_inicio)) / 1000;
+ok(janelaCron === 60, `prazo geral da rodada: ${janelaCron}s`);
+
+const alvoAna = await como(UID.ana,
+  `select conteudo->>'alvo_ms' a from estados_privados where rodada_id = $1 and tipo = 'alvo_tempo'`,
+  [rodadaCron]);
+const alvoParaBruno = await como(UID.bruno,
+  `select conteudo->>'alvo_ms' a from estados_privados where rodada_id = $1 and tipo = 'alvo_tempo' and dono_id = $2`,
+  [rodadaCron, P.ana]);
+ok(alvoAna.length === 1 && Number(alvoAna[0].a) >= 3000 && Number(alvoAna[0].a) <= 12000,
+  `Ana tem um alvo só dela: ${alvoAna[0].a}ms`);
+ok(alvoParaBruno.length === 0, "Bruno não enxerga o alvo da Ana");
+
+const alvoAnaMs = Number(alvoAna[0].a);
+await esperaErro(() => rpc(UID.ana, `cronometro_enviar($1, $2)`, [rodadaCron, -5]),
+  "TEMPO_INVALIDO", "tempo negativo é recusado");
+
+await rpc(UID.ana, `cronometro_enviar($1, $2)`, [rodadaCron, alvoAnaMs]);
+await esperaErro(() => rpc(UID.ana, `cronometro_enviar($1, $2)`, [rodadaCron, alvoAnaMs]),
+  "JA_ENVIOU", "não dá para mandar o resultado duas vezes");
+
+await rpc(UID.bruno, `cronometro_enviar($1, $2)`, [rodadaCron, alvoAnaMs + 5000]);
+await rpc(UID.carla, `cronometro_enviar($1, $2)`, [rodadaCron, alvoAnaMs + 3000]);
+rodCron = (await admin(`select * from rodadas where id = $1`, [rodadaCron]))[0];
+ok(rodCron.fase === "em_andamento" && rodCron.estado.resultados.length === 3,
+  "ainda falta o Davi mandar o dele");
+
+await rpc(UID.davi, `cronometro_enviar($1, $2)`, [rodadaCron, alvoAnaMs + 4000]);
+rodCron = (await admin(`select * from rodadas where id = $1`, [rodadaCron]))[0];
+ok(rodCron.fase === "resultado", "o último resultado revela a rodada sozinho");
+ok(rodCron.resultado.vencedores.includes(P.ana),
+  `Ana bateu o próprio alvo em cheio — venceu (vencedores: ${rodCron.resultado.vencedores.length})`);
+
+const pontosAnaCron = (await admin(`select pontos from participantes where id = $1`, [P.ana]))[0].pontos;
+ok(pontosAnaCron === pontosAnaAntesCron + 1,
+  `Ana ganhou o ponto da rodada mais precisa (pontos: ${pontosAnaAntesCron} → ${pontosAnaCron})`);
+
+/* ========================================================================= */
+/* 8-C. DESENHO TELEFONE                                                    */
+/* ========================================================================= */
+
+grupo("Desenho Telefone: cadernos em rotação, tarefas privadas e revelação final");
+
+async function tarefaDesenho(uid, rodadaId) {
+  const linhas = await como(uid,
+    `select conteudo from estados_privados where rodada_id = $1 and tipo = 'tarefa_desenho'`,
+    [rodadaId]);
+  return linhas[0]?.conteudo;
+}
+
+async function enviarEtapa(uid, rodadaId, tipo) {
+  const conteudo = tipo === "frase"
+    ? { texto: `frase de ${uid.slice(0, 4)}` }
+    : { tracos: [{ cor: "#000000", pontos: [[10, 10], [50, 50], [90, 10]] }] };
+  return rpc(uid, `desenho_enviar_etapa($1, $2::jsonb)`, [rodadaId, JSON.stringify(conteudo)]);
+}
+
+r = await rpc(UID.ana, `iniciar_partida($1, 'desenho-telefone')`, [salaId]);
+const rodadaDesenho = r.rodada_id;
+
+let rodDesenho = (await admin(`select * from rodadas where id = $1`, [rodadaDesenho]))[0];
+ok(rodDesenho.fase === "em_andamento" && rodDesenho.estado.tipo_passo === "frase"
+  && rodDesenho.estado.passo_atual === 0 && rodDesenho.estado.total_passos === 4,
+  "passo 0 já monta sozinho: todo mundo escreve a própria frase inicial");
+
+const tarefaAnaP0 = await tarefaDesenho(UID.ana, rodadaDesenho);
+ok(tarefaAnaP0.tipo === "frase" && tarefaAnaP0.passo === 0,
+  "a tarefa do passo 0 é escrever, sem nada de referência");
+
+await enviarEtapa(UID.ana, rodadaDesenho, "frase");
+await enviarEtapa(UID.bruno, rodadaDesenho, "frase");
+await esperaErro(() => enviarEtapa(UID.ana, rodadaDesenho, "frase"),
+  "JA_ENVIOU", "não dá para mandar a mesma etapa duas vezes");
+await esperaErro(() => rpc(UID.carla, `desenho_enviar_etapa($1, $2::jsonb)`,
+  [rodadaDesenho, JSON.stringify({ texto: "   " })]),
+  "FRASE_VAZIA", "frase em branco é recusada");
+
+await enviarEtapa(UID.carla, rodadaDesenho, "frase");
+rodDesenho = (await admin(`select * from rodadas where id = $1`, [rodadaDesenho]))[0];
+ok(rodDesenho.estado.passo_atual === 0 && rodDesenho.estado.enviaram.length === 3,
+  "ainda falta o Davi para fechar o passo 0");
+
+await enviarEtapa(UID.davi, rodadaDesenho, "frase");
+rodDesenho = (await admin(`select * from rodadas where id = $1`, [rodadaDesenho]))[0];
+ok(rodDesenho.estado.passo_atual === 1 && rodDesenho.estado.tipo_passo === "desenho",
+  "todo mundo escreveu: o passo 1 já é de desenho");
+
+const tarefaBrunoP1 = await tarefaDesenho(UID.bruno, rodadaDesenho);
+ok(tarefaBrunoP1.tipo === "desenho" && tarefaBrunoP1.anterior?.texto,
+  `Bruno recebe uma frase de outra pessoa para desenhar: "${tarefaBrunoP1.anterior.texto}"`);
+ok(tarefaBrunoP1.caderno !== undefined, "cada tarefa sabe a qual caderno pertence");
+
+await esperaErro(() => rpc(UID.bruno, `desenho_enviar_etapa($1, $2::jsonb)`,
+  [rodadaDesenho, JSON.stringify({ tracos: [] })]),
+  "DESENHO_VAZIO", "desenho sem nenhum traço é recusado");
+
+for (const uid of [UID.ana, UID.bruno, UID.carla, UID.davi]) {
+  const tarefa = await tarefaDesenho(uid, rodadaDesenho);
+  await enviarEtapa(uid, rodadaDesenho, tarefa.tipo);
+}
+rodDesenho = (await admin(`select * from rodadas where id = $1`, [rodadaDesenho]))[0];
+ok(rodDesenho.estado.passo_atual === 2 && rodDesenho.estado.tipo_passo === "frase",
+  "passo 2 volta a ser de legenda, sobre o desenho do passo 1");
+
+const tarefaCarlaP2 = await tarefaDesenho(UID.carla, rodadaDesenho);
+ok(tarefaCarlaP2.tipo === "frase" && Array.isArray(tarefaCarlaP2.anterior?.tracos),
+  "quem legenda vê os traços do desenho anterior, não a frase original");
+
+for (const uid of [UID.ana, UID.bruno, UID.carla, UID.davi]) {
+  const tarefa = await tarefaDesenho(uid, rodadaDesenho);
+  await enviarEtapa(uid, rodadaDesenho, tarefa.tipo);
+}
+rodDesenho = (await admin(`select * from rodadas where id = $1`, [rodadaDesenho]))[0];
+ok(rodDesenho.estado.passo_atual === 3 && rodDesenho.estado.tipo_passo === "desenho",
+  "último passo (3 de 4), de novo desenho");
+
+await esperaErro(() => rpc(UID.bruno, `desenho_forcar_avanco($1)`, [rodadaDesenho]),
+  "AINDA_TEM_TEMPO", "quem não é anfitrião não força antes do prazo estourar");
+
+// Carla deixa o último passo em branco — o anfitrião força mesmo assim
+const tarefaCarlaP3 = await tarefaDesenho(UID.carla, rodadaDesenho);
+await enviarEtapa(UID.ana, rodadaDesenho, (await tarefaDesenho(UID.ana, rodadaDesenho)).tipo);
+await enviarEtapa(UID.bruno, rodadaDesenho, (await tarefaDesenho(UID.bruno, rodadaDesenho)).tipo);
+await enviarEtapa(UID.davi, rodadaDesenho, (await tarefaDesenho(UID.davi, rodadaDesenho)).tipo);
+
+await rpc(UID.ana, `desenho_forcar_avanco($1)`, [rodadaDesenho]);
+rodDesenho = (await admin(`select * from rodadas where id = $1`, [rodadaDesenho]))[0];
+ok(rodDesenho.fase === "resultado", "anfitriã força o fim do último passo e revela a rodada");
+
+const cadernoDaCarla = rodDesenho.resultado.cadernos.find((c) => c.caderno === tarefaCarlaP3.caderno);
+const passoFaltante = cadernoDaCarla.passos.find((p) => p.passo === tarefaCarlaP3.passo);
+ok(passoFaltante.autor === null && passoFaltante.conteudo === null,
+  "o passo que a Carla não respondeu aparece como buraco, sem travar a revelação");
+
+ok(rodDesenho.resultado.cadernos.length === 4, "quatro cadernos completos na revelação");
+const cadernoCompleto = rodDesenho.resultado.cadernos.find((c) => c.caderno !== tarefaCarlaP3.caderno);
+ok(cadernoCompleto.passos.length === 4 && cadernoCompleto.passos.every((p) => p.conteudo !== null),
+  `um caderno sem buracos tem os 4 passos completos, começando com "${cadernoCompleto.autor_original}"`);
+
+const etapasReveladas = await como(UID.bruno,
+  `select id from etapas_desenho where rodada_id = $1 and revelado`, [rodadaDesenho]);
+ok(etapasReveladas.length > 0, "depois da revelação as etapas ficam visíveis para a mesa inteira");
+
+/* ========================================================================= */
+/* 8-D. CODE NAMES                                                          */
+/* ========================================================================= */
+
+grupo("Code Names: times, tabuleiro secreto, dicas e vitória");
+
+r = await rpc(UID.ana, `iniciar_partida($1, 'code-names')`, [salaId]);
+const rodadaCN = r.rodada_id;
+
+let rodCN = (await admin(`select * from rodadas where id = $1`, [rodadaCN]))[0];
+ok(rodCN.fase === "preparando", "começa esperando os times se organizarem");
+
+await esperaErro(() => rpc(UID.ana, `codenames_entrar_time($1, 'C')`, [rodadaCN]),
+  "TIME_INVALIDO", "só existe time A ou B");
+
+await rpc(UID.ana, `codenames_entrar_time($1, 'A')`, [rodadaCN]);
+await rpc(UID.bruno, `codenames_entrar_time($1, 'A')`, [rodadaCN]);
+await rpc(UID.carla, `codenames_entrar_time($1, 'B')`, [rodadaCN]);
+await rpc(UID.davi, `codenames_entrar_time($1, 'B')`, [rodadaCN]);
+
+await esperaErro(() => rpc(UID.ana, `codenames_iniciar_tabuleiro($1)`, [rodadaCN]),
+  "SEM_SPYMASTER", "não começa sem um espião escolhido em cada time");
+
+await esperaErro(() => rpc(UID.carla, `codenames_virar_spymaster($1, 'A')`, [rodadaCN]),
+  "NAO_ESTA_NO_TIME", "só quem está no time A pode virar o espião do time A");
+
+await rpc(UID.ana, `codenames_virar_spymaster($1, 'A')`, [rodadaCN]);
+await rpc(UID.carla, `codenames_virar_spymaster($1, 'B')`, [rodadaCN]);
+
+await esperaErro(() => rpc(UID.bruno, `codenames_iniciar_tabuleiro($1)`, [rodadaCN]),
+  "SO_O_ANFITRIAO", "só a anfitriã destrava o tabuleiro");
+
+await rpc(UID.ana, `codenames_iniciar_tabuleiro($1)`, [rodadaCN]);
+rodCN = (await admin(`select * from rodadas where id = $1`, [rodadaCN]))[0];
+ok(rodCN.fase === "em_andamento" && rodCN.estado.palavras.length === 25,
+  "tabuleiro pronto: 25 palavras");
+ok(rodCN.estado.palavras.every((p) => p.revelada === false && p.cor === null),
+  "nenhuma cor verdadeira aparece no estado público");
+
+const timeQueComeca = rodCN.estado.time_da_vez;
+const timeQueEspera = timeQueComeca === "A" ? "B" : "A";
+ok(rodCN.estado.restantes[timeQueComeca] === 9 && rodCN.estado.restantes[timeQueEspera] === 8,
+  `quem começa (Time ${timeQueComeca}) tem 9 palavras; o outro, 8`);
+
+const spyDoComeco = timeQueComeca === "A" ? UID.ana : UID.carla;
+const spyDoOutro = timeQueComeca === "A" ? UID.carla : UID.ana;
+const guessDoComeco = timeQueComeca === "A" ? UID.bruno : UID.davi;
+const guessDoOutro = timeQueComeca === "A" ? UID.davi : UID.bruno;
+
+const mapaSecreto = await como(spyDoComeco,
+  `select conteudo->'cores' c from estados_privados where rodada_id = $1 and tipo = 'mapa_secreto'`,
+  [rodadaCN]);
+const cores = mapaSecreto[0].c;
+ok(cores.length === 25, "o espião vê as 25 cores verdadeiras");
+
+const mapaParaQuemNaoEEspiao = await como(guessDoComeco,
+  `select * from estados_privados where rodada_id = $1 and tipo = 'mapa_secreto'`, [rodadaCN]);
+ok(mapaParaQuemNaoEEspiao.length === 0, "quem não é espião não enxerga o mapa secreto");
+
+await esperaErro(() => rpc(guessDoComeco, `codenames_virar_palavra($1, 0)`, [rodadaCN]),
+  "SEM_DICA_AINDA", "não dá para chutar sem uma dica na mesa");
+
+await esperaErro(() => rpc(guessDoComeco, `codenames_dar_dica($1, 'ANIMAL', 2)`, [rodadaCN]),
+  "NAO_E_O_SPYMASTER", "quem não é o espião não dá dica");
+await esperaErro(() => rpc(spyDoOutro, `codenames_dar_dica($1, 'ANIMAL', 2)`, [rodadaCN]),
+  "NAO_E_O_SPYMASTER", "o espião do outro time não dá dica fora da vez dele");
+await esperaErro(() => rpc(spyDoComeco, `codenames_dar_dica($1, 'DOIS 3', 2)`, [rodadaCN]),
+  "DICA_INVALIDA", "a dica não pode ter espaço");
+await esperaErro(() => rpc(spyDoComeco, `codenames_dar_dica($1, 'ANIMAL2', 2)`, [rodadaCN]),
+  "DICA_INVALIDA", "a dica não pode ter número junto");
+await esperaErro(() => rpc(spyDoComeco, `codenames_dar_dica($1, 'ANIMAL', 15)`, [rodadaCN]),
+  "DICA_INVALIDA", "o número da dica tem limite");
+
+await rpc(spyDoComeco, `codenames_dar_dica($1, 'animal', 2)`, [rodadaCN]);
+rodCN = (await admin(`select * from rodadas where id = $1`, [rodadaCN]))[0];
+ok(rodCN.estado.dica_atual.palavra === "ANIMAL" && rodCN.estado.dica_atual.numero === 2,
+  "dica registrada em maiúsculas, com o número");
+ok(rodCN.estado.palpites_restantes === 3, "número + 1 palpites, contando a margem de segurança");
+
+await esperaErro(() => rpc(spyDoComeco, `codenames_dar_dica($1, 'OUTRA', 1)`, [rodadaCN]),
+  "DICA_JA_DADA", "não dá pra trocar a dica no meio do turno");
+await esperaErro(() => rpc(spyDoComeco, `codenames_virar_palavra($1, 0)`, [rodadaCN]),
+  "SPYMASTER_NAO_CLICA", "o espião não aponta palavra, só dá dica");
+await esperaErro(() => rpc(guessDoOutro, `codenames_virar_palavra($1, 0)`, [rodadaCN]),
+  "NAO_E_SEU_TIME", "só o time da vez aponta palavra");
+
+const indiceDoTime = cores.findIndex((c) => c === timeQueComeca);
+const indiceNeutro = cores.findIndex((c) => c === "neutro");
+const indiceBomba = cores.findIndex((c) => c === "bomba");
+
+const acertoCN = await rpc(guessDoComeco, `codenames_virar_palavra($1, $2)`, [rodadaCN, indiceDoTime]);
+ok(acertoCN.fim === false && acertoCN.cor === timeQueComeca, "acertou a cor do próprio time");
+rodCN = (await admin(`select * from rodadas where id = $1`, [rodadaCN]))[0];
+ok(rodCN.estado.time_da_vez === timeQueComeca && rodCN.estado.palpites_restantes === 2,
+  "acertando, o turno continua com um palpite a menos");
+ok(rodCN.estado.restantes[timeQueComeca] === 8, "uma palavra do time a menos para completar");
+
+await esperaErro(() => rpc(guessDoComeco, `codenames_virar_palavra($1, $2)`, [rodadaCN, indiceDoTime]),
+  "PALAVRA_JA_VIRADA", "não dá pra virar a mesma palavra duas vezes");
+
+const erro = await rpc(guessDoComeco, `codenames_virar_palavra($1, $2)`, [rodadaCN, indiceNeutro]);
+ok(erro.fim === false && erro.cor === "neutro", "palavra neutra não pertence a ninguém");
+rodCN = (await admin(`select * from rodadas where id = $1`, [rodadaCN]))[0];
+ok(rodCN.estado.time_da_vez === timeQueEspera && rodCN.estado.dica_atual === null,
+  "errando a cor, o turno passa e a dica reseta");
+
+// Atalho para não precisar acertar 7 ou 8 palavras uma por uma: leva o time
+// que está com a vez a um passo da vitória e confere se o acerto final fecha o jogo
+await rpc(spyDoOutro, `codenames_dar_dica($1, 'ULTIMA', 1)`, [rodadaCN]);
+await admin(
+  `update rodadas set estado = estado || jsonb_build_object('restantes',
+     (estado->'restantes') || jsonb_build_object($2::text, 1)) where id = $1`,
+  [rodadaCN, timeQueEspera]
+);
+
+const indiceDoOutroTime = cores.findIndex((c, i) => c === timeQueEspera && i !== indiceDoTime);
+const vitoria = await rpc(guessDoOutro, `codenames_virar_palavra($1, $2)`, [rodadaCN, indiceDoOutroTime]);
+ok(vitoria.fim === true && vitoria.vencedor_time === timeQueEspera,
+  `Time ${timeQueEspera} completou as próprias palavras e venceu`);
+
+rodCN = (await admin(`select * from rodadas where id = $1`, [rodadaCN]))[0];
+ok(rodCN.fase === "resultado" && rodCN.resultado.motivo === "completou_palavras",
+  "motivo da vitória registrado");
+ok(rodCN.resultado.tabuleiro.length === 25 && rodCN.resultado.tabuleiro[indiceBomba].cor === "bomba",
+  "o resumo final mostra o tabuleiro inteiro, bomba incluída");
+
+grupo("Code Names: pegar a bomba perde na hora");
+
+r = await rpc(UID.ana, `iniciar_partida($1, 'code-names')`, [salaId]);
+const rodadaBomba = r.rodada_id;
+
+await rpc(UID.ana, `codenames_entrar_time($1, 'A')`, [rodadaBomba]);
+await rpc(UID.bruno, `codenames_entrar_time($1, 'A')`, [rodadaBomba]);
+await rpc(UID.carla, `codenames_entrar_time($1, 'B')`, [rodadaBomba]);
+await rpc(UID.davi, `codenames_entrar_time($1, 'B')`, [rodadaBomba]);
+await rpc(UID.ana, `codenames_virar_spymaster($1, 'A')`, [rodadaBomba]);
+await rpc(UID.carla, `codenames_virar_spymaster($1, 'B')`, [rodadaBomba]);
+await rpc(UID.ana, `codenames_iniciar_tabuleiro($1)`, [rodadaBomba]);
+
+let rodBomba = (await admin(`select * from rodadas where id = $1`, [rodadaBomba]))[0];
+const timeDaBomba = rodBomba.estado.time_da_vez;
+const spyDaBomba = timeDaBomba === "A" ? UID.ana : UID.carla;
+const guessDaBomba = timeDaBomba === "A" ? UID.bruno : UID.davi;
+const timeAdversarioBomba = timeDaBomba === "A" ? "B" : "A";
+
+const coresBomba = (await como(spyDaBomba,
+  `select conteudo->'cores' c from estados_privados where rodada_id = $1 and tipo = 'mapa_secreto'`,
+  [rodadaBomba]))[0].c;
+const indiceBombaReal = coresBomba.findIndex((c) => c === "bomba");
+
+await rpc(spyDaBomba, `codenames_dar_dica($1, 'CUIDADO', 1)`, [rodadaBomba]);
+const explodiu = await rpc(guessDaBomba, `codenames_virar_palavra($1, $2)`, [rodadaBomba, indiceBombaReal]);
+ok(explodiu.fim === true && explodiu.vencedor_time === timeAdversarioBomba,
+  `Time ${timeDaBomba} pegou a bomba — Time ${timeAdversarioBomba} vence na hora`);
+
+rodBomba = (await admin(`select * from rodadas where id = $1`, [rodadaBomba]))[0];
+ok(rodBomba.fase === "resultado" && rodBomba.resultado.motivo === "bomba",
+  "motivo registrado como bomba");
 
 /* ========================================================================= */
 /* 9. PRESENÇA, DESCONEXÃO E SAÍDA                                           */

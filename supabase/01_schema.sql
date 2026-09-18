@@ -15,9 +15,19 @@ do $$ begin
     'mimica',
     'cara-a-cara',
     'duas-verdades',
-    'verdade-ou-desafio'
+    'verdade-ou-desafio',
+    'cronometro',
+    'desenho-telefone',
+    'code-names'
   );
 exception when duplicate_object then null; end $$;
+
+-- Bancos que já tinham o tipo de uma versão anterior deste arquivo (sem os
+-- jogos novos): `ALTER TYPE ... ADD VALUE` não pode rodar dentro de bloco de
+-- transação, por isso são comandos soltos, fora de qualquer `do $$`.
+alter type jogo_id add value if not exists 'cronometro';
+alter type jogo_id add value if not exists 'desenho-telefone';
+alter type jogo_id add value if not exists 'code-names';
 
 do $$ begin
   create type status_sala as enum ('lobby', 'jogando', 'encerrada');
@@ -154,6 +164,7 @@ create table if not exists estados_privados (
   partida_id uuid references partidas (id) on delete cascade,
   dono_id uuid not null references participantes (id) on delete cascade,
   tipo text not null,                    -- 'identidade' | 'palavra' | 'personagem' | 'eliminados' | 'frases'
+                                          -- | 'alvo_tempo' | 'tarefa_desenho'
   conteudo jsonb not null default '{}'::jsonb,
   visivel_para_dono boolean not null default true,
   criado_em timestamptz not null default now()
@@ -193,6 +204,49 @@ create table if not exists votos (
 );
 
 create unique index if not exists idx_voto_unico on votos (rodada_id, votante_id);
+
+-- ------------------------------------------------------------- Avaliações
+-- Votação anônima de "valeu / não valeu / neutro" do C, S, Composto: cada
+-- palavra da cadeia recebe uma avaliação por votante, então o registro é por
+-- (rodada, palavra, avaliador) em vez de um voto só por rodada como em `votos`.
+
+create table if not exists avaliacoes (
+  id uuid primary key default gen_random_uuid(),
+  sala_id uuid not null references salas (id) on delete cascade,
+  rodada_id uuid not null references rodadas (id) on delete cascade,
+  indice integer not null,               -- posição da palavra na cadeia (historico)
+  avaliador_id uuid not null references participantes (id) on delete cascade,
+  valor text not null check (valor in ('valeu', 'nao_valeu', 'neutro')),
+  revelado boolean not null default false,
+  criado_em timestamptz not null default now()
+);
+
+create unique index if not exists idx_avaliacao_unica
+  on avaliacoes (rodada_id, indice, avaliador_id);
+create index if not exists idx_avaliacoes_rodada on avaliacoes (rodada_id);
+
+-- -------------------------------------------------------- Etapas (desenho)
+-- Cada "caderno" do Desenho Telefone começa com a frase de um jogador e
+-- alterna desenho/frase a cada passo, sempre com uma pessoa diferente. O
+-- conteúdo de cada etapa fica escondido da mesa até a revelação final —
+-- ninguém pode adiantar o que vem antes ou depois do próprio passo.
+
+create table if not exists etapas_desenho (
+  id uuid primary key default gen_random_uuid(),
+  sala_id uuid not null references salas (id) on delete cascade,
+  rodada_id uuid not null references rodadas (id) on delete cascade,
+  caderno integer not null,              -- índice do caderno (= ordem de quem abriu)
+  passo integer not null,                -- 0 = frase inicial, depois alterna desenho/frase
+  autor_id uuid not null references participantes (id) on delete cascade,
+  tipo text not null check (tipo in ('frase', 'desenho')),
+  conteudo jsonb not null,               -- {texto} ou {tracos:[{cor,pontos:[[x,y],...]}]}
+  revelado boolean not null default false,
+  criado_em timestamptz not null default now()
+);
+
+create unique index if not exists idx_etapa_unica
+  on etapas_desenho (rodada_id, caderno, passo);
+create index if not exists idx_etapas_rodada on etapas_desenho (rodada_id);
 
 -- ------------------------------------------------------------ Pontuações
 
@@ -254,6 +308,6 @@ create index if not exists idx_cartas_busca on cartas (jogo, tipo, adulto) where
 grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on
   salas, participantes, partidas, rodadas, estados_privados,
-  envios, votos, pontuacoes, duelos
+  envios, votos, avaliacoes, etapas_desenho, pontuacoes, duelos
   to authenticated;
 grant select on cartas to authenticated;

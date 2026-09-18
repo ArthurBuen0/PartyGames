@@ -75,6 +75,8 @@ alter table rodadas           enable row level security;
 alter table estados_privados  enable row level security;
 alter table envios            enable row level security;
 alter table votos             enable row level security;
+alter table avaliacoes        enable row level security;
+alter table etapas_desenho    enable row level security;
 alter table pontuacoes        enable row level security;
 alter table duelos            enable row level security;
 alter table cartas            enable row level security;
@@ -136,6 +138,32 @@ create policy "voto próprio ou já revelado"
   using (
     app_esta_na_sala(sala_id)
     and (revelado or votante_id = app_participante_id(sala_id))
+  );
+
+-- -------------------------------------------------------------- Avaliações
+-- Mesmo princípio dos votos: cada palavra do C, S, Composto só revela quem
+-- avaliou o quê depois que a rodada inteira é revelada.
+
+drop policy if exists "avaliação própria ou já revelada" on avaliacoes;
+create policy "avaliação própria ou já revelada"
+  on avaliacoes for select
+  to authenticated
+  using (
+    app_esta_na_sala(sala_id)
+    and (revelado or avaliador_id = app_participante_id(sala_id))
+  );
+
+-- -------------------------------------------------------------- Etapas
+-- Mesmo princípio: cada etapa do Desenho Telefone só é lida por quem a fez,
+-- até a rodada inteira ser revelada no final — ninguém adianta a cadeia.
+
+drop policy if exists "etapa própria ou já revelada" on etapas_desenho;
+create policy "etapa própria ou já revelada"
+  on etapas_desenho for select
+  to authenticated
+  using (
+    app_esta_na_sala(sala_id)
+    and (revelado or autor_id = app_participante_id(sala_id))
   );
 
 -- ------------------------------------------------------- Estados privados

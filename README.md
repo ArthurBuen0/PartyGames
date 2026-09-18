@@ -102,20 +102,25 @@ Abra em duas abas (ou no celular, pelo IP da rede) para ver a sincronização ac
 
 ---
 
-## Os sete jogos
+## Os dez jogos
 
 | Jogo | Cronômetro | O que é privado |
 | --- | --- | --- |
-| 🔤 **C, S, Composto** | 5s por vez | nada — todos veem a mesma tela |
+| 🔤 **C, S, Composto** | 10s por vez, 120s na votação | o voto de cada palavra, até a revelação final |
 | 🔗 **Palavra Parecida** | 5s por vez | nada |
 | 🕵️ **Quem Sou Eu?** | — | sua identidade some **para você** e aparece para os outros |
 | 🎭 **Mímica** | 60s sincronizados | a palavra secreta, só para quem representa |
 | 🧩 **Cara a Cara** | — | seu personagem e suas marcas de descarte |
 | 🤥 **Duas Verdades e Uma Mentira** | 120s escrita, 60s votação | as frases enquanto escreve, e cada voto até a revelação |
 | 🎲 **Verdade ou Desafio** | — | nada (o baralho +18 é liberado por RPC, nunca por leitura direta) |
+| ⏱️ **Cronômetro** | 60s por rodada (a contagem em si roda no aparelho, sem servidor) | o alvo em milissegundos de cada um |
+| 🎨 **Desenho Telefone** | 45s por frase, 90s por desenho | cada etapa, até a revelação final do caderno inteiro |
+| 🎯 **Code Names** | — | o mapa de cores verdadeiras, só para os dois Spymasters |
 
 Com mais de duas pessoas, o **Cara a Cara** monta mesas em duplas e a sala acompanha o
-andamento de todas.
+andamento de todas. No **Desenho Telefone**, todo mundo trabalha ao mesmo tempo em cadernos
+diferentes — ninguém fica esperando a vez de ninguém. No **Code Names**, dois times jogam em
+paralelo — cada um só espera a própria vez, nunca a do outro time.
 
 ---
 

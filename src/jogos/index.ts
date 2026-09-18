@@ -7,6 +7,9 @@ import { quemSouEu } from "./QuemSouEu";
 import { caraACara } from "./CaraACara";
 import { duasVerdades } from "./DuasVerdades";
 import { verdadeOuDesafio } from "./VerdadeOuDesafio";
+import { cronometro } from "./Cronometro";
+import { desenhoTelefone } from "./DesenhoTelefone";
+import { codeNames } from "./CodeNames";
 
 /**
  * Registro dos jogos: a `Mesa` procura o módulo pelo id que veio da partida.
@@ -20,7 +23,10 @@ export const MODULOS: Record<JogoId, ModuloJogo> = {
   mimica,
   "cara-a-cara": caraACara,
   "duas-verdades": duasVerdades,
-  "verdade-ou-desafio": verdadeOuDesafio
+  "verdade-ou-desafio": verdadeOuDesafio,
+  cronometro,
+  "desenho-telefone": desenhoTelefone,
+  "code-names": codeNames
 };
 
 export type { ModuloJogo, PropsJogo } from "./tipos";

@@ -71,19 +71,19 @@ export const JOGOS: DefinicaoJogo[] = [
     nome: "C, S, Composto",
     emoji: "🔤",
     cor: "roxo",
-    resumo: "Categoria sorteada e 5 segundos para responder na sequência C → S → composta.",
+    resumo: "Cadeia de palavras proibidas: nem C, nem S, nem composta — e ligada à anterior.",
     jogadores: "3 a 12 pessoas",
-    duracao: "5 a 15 min",
+    duracao: "10 a 20 min",
     minimo: 2,
     regras: [
-      "O app sorteia uma categoria — frutas, cidades, filmes, animais — e mostra para todo mundo.",
-      "Quem está na vez recebe a regra: uma palavra com C, com S ou uma palavra composta.",
-      "São 5 segundos para falar em voz alta e tocar em “Próximo jogador”.",
-      "Se o tempo zerar, a tela anuncia quem perdeu a rodada.",
-      "O anfitrião confirma a eliminação ou perdoa, se a mesa achar que a resposta valeu.",
-      "Segue até sobrar uma pessoa."
+      "Todo mundo confirma “Estou pronto” antes de começar.",
+      "Uma palavra sorteada abre a cadeia. Na sua vez, você tem 10 segundos para escrever uma palavra ligada à anterior — nunca começando com C ou S, e nunca composta.",
+      "A cadeia passa de pessoa em pessoa até completar o número de rodadas escolhido pelo anfitrião.",
+      "No fim, todo mundo avalia em segredo cada palavra: valeu, não valeu ou neutro (menos a que você mesmo escreveu).",
+      "A maioria decide: “valeu” na frente soma ponto para quem escreveu, “não valeu” na frente tira ponto, empate não mexe em nada.",
+      "Ninguém é eliminado — é só pontos até a próxima rodada."
     ],
-    visibilidade: "Todo mundo vê a mesma coisa. Só a tela de quem está na vez tem o botão de avançar."
+    visibilidade: "A cadeia é igual para todo mundo. O voto de cada palavra é secreto até a revelação final."
   },
   {
     id: "palavra-parecida",
@@ -199,6 +199,63 @@ export const JOGOS: DefinicaoJogo[] = [
       "O modo +18 só liga com confirmação de maioridade e pode ser desligado a qualquer momento."
     ],
     visibilidade: "Tela igual para todos: a carta é lida em voz alta pela mesa."
+  },
+  {
+    id: "cronometro",
+    nome: "Cronômetro",
+    emoji: "⏱️",
+    cor: "laranja",
+    resumo: "Um alvo em segundos e milésimos, só seu. Pare o mais perto que conseguir.",
+    jogadores: "2 a 12 pessoas",
+    duracao: "3 a 8 min",
+    minimo: 2,
+    regras: [
+      "Cada pessoa recebe um alvo aleatório, em segundos e milésimos — só ela vê o número.",
+      "Ao tocar em “Iniciar”, o número some e um sinal (som + vibração) avisa que a contagem começou.",
+      "A contagem roda escondida: só dá para contar de cabeça e sentir o tempo passar.",
+      "Toque em “Parar” quando achar que chegou no seu alvo.",
+      "Quem errar por menos tempo ganha o ponto da rodada.",
+      "Todo mundo joga ao mesmo tempo, sem espera de vez."
+    ],
+    visibilidade: "O alvo é só seu. Assim que alguém para o cronômetro, o resultado aparece para a mesa."
+  },
+  {
+    id: "desenho-telefone",
+    nome: "Desenho Telefone",
+    emoji: "🎨",
+    cor: "turquesa",
+    resumo: "Telefone sem fio com desenho: frase vira desenho, desenho vira frase, até o final.",
+    jogadores: "3 a 12 pessoas",
+    duracao: "15 a 25 min",
+    minimo: 3,
+    regras: [
+      "Todo mundo escreve uma frase ao mesmo tempo — a sua nunca aparece para você depois.",
+      "Cada frase vai para outra pessoa desenhar, com tempo cronometrado.",
+      "O desenho passa para uma terceira pessoa escrever o que acha que está acontecendo.",
+      "E segue passando — desenho vira frase, frase vira desenho — até dar a volta na mesa toda.",
+      "Quem não mandar a tempo deixa um buraco naquele passo, mas o jogo não trava.",
+      "No final, a mesa vê a corrida inteira de cada caderno, do começo à deformação total."
+    ],
+    visibilidade: "Cada etapa é privada até a revelação final — só quem está fazendo aquele passo vê o anterior."
+  },
+  {
+    id: "code-names",
+    nome: "Code Names",
+    emoji: "🎯",
+    cor: "coral",
+    resumo: "Dois times, um tabuleiro de 25 palavras, uma dica por vez — e uma bomba escondida.",
+    jogadores: "4 a 12 pessoas",
+    duracao: "10 a 20 min",
+    minimo: 4,
+    regras: [
+      "Formem dois times e cada um escolhe um Spymaster — só ele vê as cores verdadeiras das 25 palavras.",
+      "Na sua vez, o Spymaster dá uma dica com uma palavra e um número (ex.: “Praia: 3”).",
+      "O resto do time discute e aponta as palavras que acha que a dica indica.",
+      "Acertou a cor do próprio time? Segue apontando, dentro do limite de palpites.",
+      "Errou (cor do outro time ou neutra)? A vez passa para o outro time.",
+      "Quem apontar a palavra-bomba perde a partida na hora."
+    ],
+    visibilidade: "Só os Spymasters veem as cores verdadeiras — o resto da mesa vê apenas as palavras."
   }
 ];
 

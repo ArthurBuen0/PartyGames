@@ -155,12 +155,17 @@ $$;
 create or replace function _duracao_turno(p_jogo jogo_id, p_fase fase_rodada)
 returns integer language sql immutable as $$
   select case
-    when p_jogo = 'c-s-composto' then 5
+    when p_jogo = 'c-s-composto' and p_fase = 'em_andamento' then 10
+    when p_jogo = 'c-s-composto' and p_fase = 'votacao' then 120
     when p_jogo = 'palavra-parecida' then 5
     -- Mímica: os 60s só começam quando o mímico apertar "começar", nunca antes
     when p_jogo = 'mimica' and p_fase = 'em_andamento' then 60
     when p_jogo = 'duas-verdades' and p_fase = 'escrevendo' then 120
     when p_jogo = 'duas-verdades' and p_fase = 'votacao' then 60
+    when p_jogo = 'cronometro' and p_fase = 'em_andamento' then 60
+    -- Desenho Telefone: a duração de cada passo varia com o tipo (desenho
+    -- demora mais que frase) — ver `_desenho_montar_passo`, que define o
+    -- prazo na hora e sobrescreve o que vier daqui.
     else null
   end;
 $$;
@@ -466,6 +471,7 @@ declare
   v_primeiro uuid;
   v_jogador record;
   v_usadas jsonb := '[]'::jsonb;
+  v_autores jsonb;
   v_duracao integer;
   v_fase fase_rodada := 'em_andamento';
 begin
@@ -489,13 +495,23 @@ begin
   end if;
 
   if v_partida.jogo = 'c-s-composto' then
-    v_carta := _sortear_carta('c-s-composto', 'categoria');
+    -- Cadeia de palavras: nada de C, nada de S, nada de composta, e cada
+    -- palavra precisa ter a ver com a anterior. Começa com uma tela de
+    -- "prontos" — o cronômetro só liga quando todo mundo confirmar.
+    v_carta := _sortear_carta('palavra-parecida', 'palavra');
+    v_fase := 'preparando';
     update rodadas set
       estado = jsonb_build_object(
-        'categoria', v_carta.conteudo->>'texto',
-        'sequencia', jsonb_build_array('C', 'S', 'Composto'),
-        'indice', 0,
-        'voltas', 0
+        'palavra_atual', v_carta.conteudo->>'texto',
+        'historico', jsonb_build_array(
+          jsonb_build_object('palavra', v_carta.conteudo->>'texto', 'autor', null, 'autor_id', null)
+        ),
+        'meta_rodadas', least(greatest(coalesce((v_partida.config->>'rodadas')::int, 10), 3), 30),
+        'rodada_atual', 0,
+        'prontos', '[]'::jsonb,
+        'total_prontos', _ativos(v_sala.id),
+        'avaliacoes_feitas', 0,
+        'avaliacoes_esperadas', 0
       ),
       vez_de = v_primeiro
     where id = p_rodada;
@@ -585,6 +601,72 @@ begin
       )),
       vez_de = null
     where id = p_rodada;
+
+  elsif v_partida.jogo = 'cronometro' then
+    -- Um alvo aleatório por pessoa, em milissegundos — o resto acontece no
+    -- aparelho de cada um, sem rodada ida e volta com o servidor.
+    for v_jogador in
+      select id from participantes
+      where sala_id = v_sala.id and saiu_em is null and not eliminado
+      order by ordem, id
+    loop
+      insert into estados_privados
+        (sala_id, rodada_id, partida_id, dono_id, tipo, conteudo, visivel_para_dono)
+      values (
+        v_sala.id, p_rodada, v_partida.id, v_jogador.id, 'alvo_tempo',
+        jsonb_build_object('alvo_ms', floor(3000 + random() * 9000)::int),
+        true
+      );
+    end loop;
+
+    update rodadas set
+      estado = jsonb_build_object(
+        'resultados', '[]'::jsonb,
+        'total_jogadores', _ativos(v_sala.id)
+      ),
+      vez_de = null
+    where id = p_rodada;
+
+  elsif v_partida.jogo = 'code-names' then
+    -- Times e espiões se organizam sozinhos antes do tabuleiro existir —
+    -- ver `codenames_entrar_time`, `codenames_virar_spymaster` e
+    -- `codenames_iniciar_tabuleiro`.
+    v_fase := 'preparando';
+    update rodadas set
+      estado = jsonb_build_object(
+        'time_de', '{}'::jsonb,
+        'spymaster_a', null,
+        'spymaster_b', null,
+        'primeiro_time', null,
+        'time_da_vez', null,
+        'palavras', '[]'::jsonb,
+        'restantes', '{}'::jsonb,
+        'dica_atual', null,
+        'palpites_restantes', null,
+        'historico', '[]'::jsonb
+      ),
+      vez_de = null
+    where id = p_rodada;
+
+  elsif v_partida.jogo = 'desenho-telefone' then
+    -- Um "caderno" por jogador ativo (índice fixo pela ordem da roda). O
+    -- passo 0 — a frase inicial de cada um — é montado logo depois, por
+    -- `_desenho_montar_passo`, que também cuida dos passos seguintes.
+    select coalesce(jsonb_agg(id order by ordem, id), '[]'::jsonb) into v_autores
+    from participantes
+    where sala_id = v_sala.id and saiu_em is null and not eliminado;
+
+    update rodadas set
+      estado = jsonb_build_object(
+        'autores', v_autores,
+        'passo_atual', 0,
+        'total_passos', jsonb_array_length(v_autores),
+        'total_jogadores', jsonb_array_length(v_autores),
+        'tipo_passo', 'frase',
+        'enviaram', '[]'::jsonb
+      ),
+      vez_de = null
+    where id = p_rodada;
   end if;
 
   v_duracao := _duracao_turno(v_partida.jogo, v_fase);
@@ -619,6 +701,14 @@ begin
 
   if v_total < 2 then perform _erro('POUCOS_JOGADORES'); end if;
   if p_jogo = 'cara-a-cara' and v_total < 2 then perform _erro('POUCOS_JOGADORES'); end if;
+  if p_jogo = 'desenho-telefone' and v_total < 3 then perform _erro('POUCOS_JOGADORES'); end if;
+  if p_jogo = 'code-names' and v_total < 4 then perform _erro('POUCOS_JOGADORES'); end if;
+
+  if p_jogo = 'c-s-composto' then
+    p_config := jsonb_build_object(
+      'rodadas', least(greatest(coalesce((p_config->>'rodadas')::int, 10), 3), 30)
+    );
+  end if;
 
   -- Fecha o que estava rolando
   update partidas set status = 'encerrada', encerrada_em = now()
@@ -653,6 +743,9 @@ begin
   returning * into v_rodada;
 
   perform _preparar_rodada(v_rodada.id);
+  if p_jogo = 'desenho-telefone' then
+    perform _desenho_montar_passo(v_rodada.id, 0);
+  end if;
 
   return jsonb_build_object('partida_id', v_partida.id, 'rodada_id', v_rodada.id);
 end;
@@ -683,6 +776,10 @@ begin
   returning * into v_nova;
 
   perform _preparar_rodada(v_nova.id);
+  if v_sala.jogo_atual = 'desenho-telefone' then
+    perform _desenho_montar_passo(v_nova.id, 0);
+  end if;
+
   return jsonb_build_object('rodada_id', v_nova.id);
 end;
 $$;
@@ -711,11 +808,12 @@ $$;
 -- ============================================================================
 
 /**
- * Passa a vez. Só quem está na vez pode chamar (o anfitrião também, para
- * destravar mesa parada). Reinicia o cronômetro com horário do servidor.
+ * Passa a vez em "Palavra Parecida". Só quem está na vez pode chamar (o
+ * anfitrião também, para destravar mesa parada). Reinicia o cronômetro com
+ * horário do servidor e a palavra dita entra no histórico visível a todos.
  *
- * Em "C, S, Composto" a regra caminha C → S → Composto → C…
- * Em "Palavra Parecida" a palavra dita entra no histórico visível a todos.
+ * "C, S, Composto" tem seu próprio fluxo — ver `csc_enviar_palavra` e cia,
+ * na seção 4-B.
  */
 create or replace function avancar_turno(p_rodada uuid, p_palavra text default null)
 returns void
@@ -725,7 +823,6 @@ declare
   v_partida partidas;
   v_eu participantes;
   v_proximo uuid;
-  v_indice integer;
   v_duracao integer;
   v_estado jsonb;
   v_palavra text := nullif(trim(coalesce(p_palavra, '')), '');
@@ -750,26 +847,16 @@ begin
   v_estado := v_rodada.estado;
   v_proximo := _proximo_jogador(v_rodada.sala_id, v_rodada.vez_de);
 
-  if v_partida.jogo = 'c-s-composto' then
-    v_indice := coalesce((v_estado->>'indice')::int, 0) + 1;
-    v_estado := jsonb_set(v_estado, '{indice}', to_jsonb(v_indice % 3));
-    if v_indice % 3 = 0 then
-      v_estado := jsonb_set(v_estado, '{voltas}',
-        to_jsonb(coalesce((v_estado->>'voltas')::int, 0) + 1));
-    end if;
+  if v_palavra is not null then
+    v_estado := jsonb_set(v_estado, '{palavra_atual}', to_jsonb(v_palavra));
+    v_estado := jsonb_set(v_estado, '{historico}',
+      coalesce(v_estado->'historico', '[]'::jsonb) ||
+      jsonb_build_object('palavra', v_palavra, 'autor', v_eu.apelido)
+    );
 
-  elsif v_partida.jogo = 'palavra-parecida' then
-    if v_palavra is not null then
-      v_estado := jsonb_set(v_estado, '{palavra_atual}', to_jsonb(v_palavra));
-      v_estado := jsonb_set(v_estado, '{historico}',
-        coalesce(v_estado->'historico', '[]'::jsonb) ||
-        jsonb_build_object('palavra', v_palavra, 'autor', v_eu.apelido)
-      );
-
-      insert into envios (sala_id, rodada_id, autor_id, tipo, conteudo)
-      values (v_rodada.sala_id, p_rodada, v_eu.id, 'palavra',
-              jsonb_build_object('texto', v_palavra));
-    end if;
+    insert into envios (sala_id, rodada_id, autor_id, tipo, conteudo)
+    values (v_rodada.sala_id, p_rodada, v_eu.id, 'palavra',
+            jsonb_build_object('texto', v_palavra));
   end if;
 
   v_duracao := _duracao_turno(v_partida.jogo, 'em_andamento');
@@ -940,6 +1027,336 @@ begin
   where id = p_rodada;
 
   perform _toca_sala(v_rodada.sala_id);
+end;
+$$;
+
+-- ============================================================================
+-- 4-B. C, S, COMPOSTO (cadeia sem C/S/composta, votação e pontos)
+-- ============================================================================
+--
+-- Fluxo: preparando (todo mundo confirma "pronto") → em_andamento (cadeia de
+-- palavras, uma por vez, 10s cada) → votacao (avaliação anônima valeu/não
+-- valeu/neutro de cada palavra, menos a de quem escreveu) → resultado
+-- (maioria decide: +1 se "valeu" venceu, -1 se "não valeu" venceu, 0 no
+-- empate ou maioria neutra).
+
+/** Participante confirma que está pronto; quando todos confirmam, começa. */
+create or replace function csc_marcar_pronto(p_rodada uuid)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_partida partidas;
+  v_eu participantes;
+  v_prontos jsonb;
+  v_total integer;
+  v_duracao integer;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  v_eu := _exige_participante(v_rodada.sala_id);
+  select * into v_partida from partidas where id = v_rodada.partida_id;
+  if v_rodada.fase <> 'preparando' then perform _erro('RODADA_NAO_ESTA_ABERTA'); end if;
+
+  v_prontos := coalesce(v_rodada.estado->'prontos', '[]'::jsonb);
+  if not (v_prontos @> to_jsonb(v_eu.id::text)) then
+    v_prontos := v_prontos || to_jsonb(v_eu.id::text);
+  end if;
+
+  v_total := _ativos(v_rodada.sala_id);
+
+  update rodadas set
+    estado = v_rodada.estado || jsonb_build_object('prontos', v_prontos, 'total_prontos', v_total),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  if jsonb_array_length(v_prontos) >= v_total then
+    v_duracao := coalesce(_duracao_turno(v_partida.jogo, 'em_andamento'), 10);
+    update rodadas set
+      fase = 'em_andamento',
+      turno_inicio = now(),
+      turno_fim = now() + make_interval(secs => v_duracao),
+      atualizada_em = now()
+    where id = p_rodada;
+  end if;
+
+  perform _toca_sala(v_rodada.sala_id);
+end;
+$$;
+
+/** Anfitrião destrava a espera e começa mesmo sem todo mundo confirmar. */
+create or replace function csc_forcar_inicio(p_rodada uuid)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_partida partidas;
+  v_duracao integer;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+  perform _exige_anfitriao(v_rodada.sala_id);
+  select * into v_partida from partidas where id = v_rodada.partida_id;
+  if v_rodada.fase <> 'preparando' then return; end if;
+
+  v_duracao := coalesce(_duracao_turno(v_partida.jogo, 'em_andamento'), 10);
+  update rodadas set
+    fase = 'em_andamento',
+    turno_inicio = now(),
+    turno_fim = now() + make_interval(secs => v_duracao),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+end;
+$$;
+
+/**
+ * Quem está na vez manda a palavra. Ao completar a meta de rodadas, a cadeia
+ * fecha e a rodada parte direto para a votação anônima.
+ */
+create or replace function csc_enviar_palavra(p_rodada uuid, p_palavra text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_partida partidas;
+  v_eu participantes;
+  v_palavra text := nullif(trim(coalesce(p_palavra, '')), '');
+  v_historico jsonb;
+  v_rodada_atual integer;
+  v_meta integer;
+  v_proximo uuid;
+  v_duracao integer;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  v_eu := _exige_participante(v_rodada.sala_id);
+  select * into v_partida from partidas where id = v_rodada.partida_id;
+
+  if v_rodada.fase <> 'em_andamento' then perform _erro('RODADA_NAO_ESTA_ABERTA'); end if;
+  if v_rodada.vez_de <> v_eu.id and not v_eu.e_anfitriao then
+    perform _erro('NAO_E_SUA_VEZ');
+  end if;
+  if v_palavra is null then perform _erro('PALAVRA_VAZIA'); end if;
+
+  -- Bateu o tempo antes do toque: só pula a vez, ninguém é punido por isso
+  if v_rodada.turno_fim is not null and now() > v_rodada.turno_fim then
+    perform csc_registrar_timeout(p_rodada);
+    return jsonb_build_object('estourou', true);
+  end if;
+
+  v_historico := coalesce(v_rodada.estado->'historico', '[]'::jsonb)
+    || jsonb_build_object('palavra', v_palavra, 'autor', v_eu.apelido, 'autor_id', v_eu.id);
+
+  v_rodada_atual := coalesce((v_rodada.estado->>'rodada_atual')::int, 0) + 1;
+  v_meta := coalesce((v_rodada.estado->>'meta_rodadas')::int, 10);
+
+  insert into envios (sala_id, rodada_id, autor_id, tipo, conteudo)
+  values (v_rodada.sala_id, p_rodada, v_eu.id, 'palavra', jsonb_build_object('texto', v_palavra));
+
+  if v_rodada_atual >= v_meta then
+    update rodadas set
+      fase = 'votacao',
+      estado = v_rodada.estado || jsonb_build_object(
+        'historico', v_historico, 'palavra_atual', v_palavra, 'rodada_atual', v_rodada_atual
+      ),
+      turno_inicio = now(),
+      turno_fim = now() + make_interval(secs => coalesce(_duracao_turno('c-s-composto', 'votacao'), 120)),
+      atualizada_em = now()
+    where id = p_rodada;
+
+    perform _toca_sala(v_rodada.sala_id);
+    return jsonb_build_object('fim_cadeia', true);
+  end if;
+
+  v_proximo := _proximo_jogador(v_rodada.sala_id, v_rodada.vez_de);
+  v_duracao := coalesce(_duracao_turno(v_partida.jogo, 'em_andamento'), 10);
+
+  update rodadas set
+    estado = v_rodada.estado || jsonb_build_object(
+      'historico', v_historico, 'palavra_atual', v_palavra, 'rodada_atual', v_rodada_atual
+    ),
+    vez_de = v_proximo,
+    turno_inicio = now(),
+    turno_fim = now() + make_interval(secs => v_duracao),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+  return jsonb_build_object('fim_cadeia', false);
+end;
+$$;
+
+/** Estourou o tempo da vez: passa adiante sem eliminar ninguém. */
+create or replace function csc_registrar_timeout(p_rodada uuid)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_partida partidas;
+  v_proximo uuid;
+  v_duracao integer;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  perform _exige_participante(v_rodada.sala_id);
+  select * into v_partida from partidas where id = v_rodada.partida_id;
+
+  if v_rodada.fase <> 'em_andamento' then return; end if;
+  if v_rodada.turno_fim is null or now() < v_rodada.turno_fim then
+    perform _erro('AINDA_TEM_TEMPO');
+  end if;
+
+  v_proximo := _proximo_jogador(v_rodada.sala_id, v_rodada.vez_de);
+  v_duracao := coalesce(_duracao_turno(v_partida.jogo, 'em_andamento'), 10);
+
+  update rodadas set
+    vez_de = v_proximo,
+    turno_inicio = now(),
+    turno_fim = now() + make_interval(secs => v_duracao),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+end;
+$$;
+
+/** Voto anônimo de uma palavra da cadeia. O autor não avalia a própria. */
+create or replace function csc_avaliar_palavra(p_rodada uuid, p_indice integer, p_valor text)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_eu participantes;
+  v_historico jsonb;
+  v_item jsonb;
+  v_autor_id uuid;
+  v_total_itens integer;
+  v_esperado integer;
+  v_feitas integer;
+begin
+  if p_valor not in ('valeu', 'nao_valeu', 'neutro') then perform _erro('VALOR_INVALIDO'); end if;
+
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  v_eu := _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase <> 'votacao' then perform _erro('VOTACAO_FECHADA'); end if;
+
+  v_historico := coalesce(v_rodada.estado->'historico', '[]'::jsonb);
+  if p_indice < 0 or p_indice >= jsonb_array_length(v_historico) then
+    perform _erro('INDICE_INVALIDO');
+  end if;
+
+  v_item := v_historico -> p_indice;
+  v_autor_id := nullif(v_item->>'autor_id', '')::uuid;
+  if v_autor_id is null then perform _erro('PALAVRA_SEM_AUTOR'); end if;
+  if v_autor_id = v_eu.id then perform _erro('AUTOR_NAO_AVALIA'); end if;
+
+  insert into avaliacoes (sala_id, rodada_id, indice, avaliador_id, valor)
+  values (v_rodada.sala_id, p_rodada, p_indice, v_eu.id, p_valor)
+  on conflict (rodada_id, indice, avaliador_id) do update set valor = excluded.valor;
+
+  select count(*) into v_feitas from avaliacoes where rodada_id = p_rodada;
+
+  select count(*) into v_total_itens
+  from jsonb_array_elements(v_historico) x where x->>'autor_id' is not null;
+
+  v_esperado := v_total_itens * greatest(_ativos(v_rodada.sala_id) - 1, 0);
+
+  update rodadas set
+    estado = v_rodada.estado
+      || jsonb_build_object('avaliacoes_feitas', v_feitas, 'avaliacoes_esperadas', v_esperado),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+
+  if v_esperado > 0 and v_feitas >= v_esperado then
+    perform csc_revelar(p_rodada);
+  end if;
+end;
+$$;
+
+/**
+ * Revela a votação: para cada palavra, a maioria decide. "Valeu" na frente
+ * soma 1 ponto para quem escreveu, "não valeu" na frente tira 1, empate (ou
+ * maioria neutra) não mexe no placar.
+ */
+create or replace function csc_revelar(p_rodada uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_historico jsonb;
+  v_item jsonb;
+  v_indice integer;
+  v_autor_id uuid;
+  v_autor_apelido text;
+  v_valeu integer;
+  v_nao_valeu integer;
+  v_neutro integer;
+  v_delta integer;
+  v_resultado jsonb := '[]'::jsonb;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+  perform _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase not in ('votacao', 'em_andamento') then return v_rodada.resultado; end if;
+
+  v_historico := coalesce(v_rodada.estado->'historico', '[]'::jsonb);
+
+  for v_indice in 0..jsonb_array_length(v_historico) - 1 loop
+    v_item := v_historico -> v_indice;
+    v_autor_id := nullif(v_item->>'autor_id', '')::uuid;
+    if v_autor_id is null then continue; end if; -- palavra semente: ninguém escreveu
+
+    v_autor_apelido := v_item->>'autor';
+
+    select
+      count(*) filter (where valor = 'valeu'),
+      count(*) filter (where valor = 'nao_valeu'),
+      count(*) filter (where valor = 'neutro')
+    into v_valeu, v_nao_valeu, v_neutro
+    from avaliacoes where rodada_id = p_rodada and indice = v_indice;
+
+    if v_valeu > v_nao_valeu then
+      v_delta := 1;
+    elsif v_nao_valeu > v_valeu then
+      v_delta := -1;
+    else
+      v_delta := 0;
+    end if;
+
+    if v_delta <> 0 then
+      perform _pontuar(v_rodada.sala_id, v_rodada.partida_id, p_rodada,
+                       v_autor_id, v_delta,
+                       case when v_delta > 0 then 'palavra valeu' else 'palavra não valeu' end);
+    end if;
+
+    v_resultado := v_resultado || jsonb_build_object(
+      'indice', v_indice, 'palavra', v_item->>'palavra',
+      'autor', v_autor_apelido, 'autor_id', v_autor_id,
+      'valeu', v_valeu, 'nao_valeu', v_nao_valeu, 'neutro', v_neutro,
+      'delta', v_delta
+    );
+  end loop;
+
+  update avaliacoes set revelado = true where rodada_id = p_rodada;
+
+  update rodadas set
+    fase = 'resultado',
+    turno_fim = null,
+    resultado = jsonb_build_object('tipo', 'c_s_composto_votacao', 'avaliacoes', v_resultado),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+  return jsonb_build_object('avaliacoes', v_resultado);
 end;
 $$;
 
@@ -1675,6 +2092,738 @@ end;
 $$;
 
 -- ============================================================================
+-- 10-B. CRONÔMETRO
+-- ============================================================================
+--
+-- Cada pessoa recebe um alvo em milissegundos, só para si. A contagem em si
+-- roda inteira no aparelho (sinal sonoro/vibração e o cronômetro local não
+-- passam pelo servidor) — o cliente só manda o tempo final, e o servidor
+-- calcula o erro. Sem vez, sem turno: todo mundo joga a própria tentativa ao
+-- mesmo tempo.
+
+/** Participante manda quanto tempo (ms) contou depois do sinal. */
+create or replace function cronometro_enviar(p_rodada uuid, p_tempo_ms integer)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_eu participantes;
+  v_alvo integer;
+  v_erro integer;
+  v_resultados jsonb;
+  v_total integer;
+begin
+  if p_tempo_ms is null or p_tempo_ms < 0 then perform _erro('TEMPO_INVALIDO'); end if;
+
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  v_eu := _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase <> 'em_andamento' then perform _erro('RODADA_NAO_ESTA_ABERTA'); end if;
+
+  v_resultados := coalesce(v_rodada.estado->'resultados', '[]'::jsonb);
+  if exists (
+    select 1 from jsonb_array_elements(v_resultados) r
+    where r->>'participante_id' = v_eu.id::text
+  ) then
+    perform _erro('JA_ENVIOU');
+  end if;
+
+  select (conteudo->>'alvo_ms')::int into v_alvo from estados_privados
+  where rodada_id = p_rodada and dono_id = v_eu.id and tipo = 'alvo_tempo';
+  if v_alvo is null then perform _erro('SEM_ALVO'); end if;
+
+  v_erro := abs(p_tempo_ms - v_alvo);
+
+  v_resultados := v_resultados || jsonb_build_object(
+    'participante_id', v_eu.id, 'apelido', v_eu.apelido,
+    'alvo_ms', v_alvo, 'tempo_ms', p_tempo_ms, 'erro_ms', v_erro
+  );
+
+  update rodadas set
+    estado = v_rodada.estado || jsonb_build_object('resultados', v_resultados),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+
+  v_total := coalesce((v_rodada.estado->>'total_jogadores')::int, _ativos(v_rodada.sala_id));
+  if jsonb_array_length(v_resultados) >= v_total then
+    perform cronometro_revelar(p_rodada);
+  end if;
+
+  return jsonb_build_object('erro_ms', v_erro);
+end;
+$$;
+
+/** Fecha a rodada: quem chegou mais perto do próprio alvo pontua. */
+create or replace function cronometro_revelar(p_rodada uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_resultados jsonb;
+  v_menor_erro integer;
+  v_item jsonb;
+  v_indice integer;
+  v_vencedores jsonb := '[]'::jsonb;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+  perform _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase <> 'em_andamento' then return v_rodada.resultado; end if;
+
+  v_resultados := coalesce(v_rodada.estado->'resultados', '[]'::jsonb);
+
+  if jsonb_array_length(v_resultados) > 0 then
+    select min((r->>'erro_ms')::int) into v_menor_erro
+    from jsonb_array_elements(v_resultados) r;
+
+    for v_indice in 0..jsonb_array_length(v_resultados) - 1 loop
+      v_item := v_resultados -> v_indice;
+      if (v_item->>'erro_ms')::int = v_menor_erro then
+        perform _pontuar(v_rodada.sala_id, v_rodada.partida_id, p_rodada,
+                         (v_item->>'participante_id')::uuid, 1, 'cronômetro mais preciso');
+        v_vencedores := v_vencedores || to_jsonb(v_item->>'participante_id');
+      end if;
+    end loop;
+  end if;
+
+  update rodadas set
+    fase = 'resultado',
+    turno_fim = null,
+    resultado = jsonb_build_object(
+      'tipo', 'cronometro', 'resultados', v_resultados, 'vencedores', v_vencedores
+    ),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+  return jsonb_build_object('resultados', v_resultados, 'vencedores', v_vencedores);
+end;
+$$;
+
+-- ============================================================================
+-- 10-C. DESENHO TELEFONE
+-- ============================================================================
+--
+-- N jogadores ativos = N "cadernos" (`estado.autores`, índice fixo desde o
+-- início da rodada). Cada caderno começa com a frase de quem abriu (passo 0)
+-- e alterna desenho/frase a cada passo seguinte — sempre com uma pessoa
+-- diferente da anterior, calculada por rotação: quem cuida do caderno `c` no
+-- passo `k` é sempre `(c + k) mod N`, o que garante que todo mundo tem
+-- exatamente uma tarefa por passo e nunca cai na própria página antes da
+-- revelação final. O conteúdo de cada etapa fica em `etapas_desenho`,
+-- escondido da mesa até o fim (RLS em 02_policies).
+
+/** Monta as tarefas privadas de um passo (0 = frase inicial de cada um). */
+create or replace function _desenho_montar_passo(p_rodada uuid, p_passo integer)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_autores jsonb;
+  v_n integer;
+  v_tipo text;
+  v_caderno integer;
+  v_autor_id uuid;
+  v_anterior jsonb;
+  v_duracao integer;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  v_autores := coalesce(v_rodada.estado->'autores', '[]'::jsonb);
+  v_n := jsonb_array_length(v_autores);
+  if v_n = 0 then return; end if;
+
+  v_tipo := case when p_passo % 2 = 1 then 'desenho' else 'frase' end;
+
+  for v_caderno in 0..v_n - 1 loop
+    v_autor_id := (v_autores ->> ((v_caderno + p_passo) % v_n))::uuid;
+
+    select conteudo into v_anterior from etapas_desenho
+    where rodada_id = p_rodada and caderno = v_caderno and passo = p_passo - 1;
+
+    insert into estados_privados
+      (sala_id, rodada_id, partida_id, dono_id, tipo, conteudo, visivel_para_dono)
+    values (
+      v_rodada.sala_id, p_rodada, v_rodada.partida_id, v_autor_id, 'tarefa_desenho',
+      jsonb_build_object(
+        'caderno', v_caderno, 'passo', p_passo, 'tipo', v_tipo,
+        'anterior', coalesce(v_anterior, '{}'::jsonb)
+      ),
+      true
+    )
+    on conflict (coalesce(rodada_id, partida_id), dono_id, tipo)
+    do update set conteudo = excluded.conteudo;
+  end loop;
+
+  v_duracao := case when v_tipo = 'desenho' then 90 else 45 end;
+
+  update rodadas set
+    fase = 'em_andamento',
+    estado = v_rodada.estado || jsonb_build_object(
+      'passo_atual', p_passo, 'tipo_passo', v_tipo, 'enviaram', '[]'::jsonb
+    ),
+    turno_inicio = now(),
+    turno_fim = now() + make_interval(secs => v_duracao),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+end;
+$$;
+
+/** Quem está com a tarefa manda a etapa (frase ou desenho). */
+create or replace function desenho_enviar_etapa(p_rodada uuid, p_conteudo jsonb)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_eu participantes;
+  v_tarefa jsonb;
+  v_caderno integer;
+  v_passo integer;
+  v_tipo text;
+  v_enviaram jsonb;
+  v_total_jogadores integer;
+  v_total_passos integer;
+  v_texto text;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  v_eu := _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase <> 'em_andamento' then perform _erro('RODADA_NAO_ESTA_ABERTA'); end if;
+
+  select conteudo into v_tarefa from estados_privados
+  where rodada_id = p_rodada and dono_id = v_eu.id and tipo = 'tarefa_desenho';
+  if v_tarefa is null then perform _erro('SEM_TAREFA'); end if;
+
+  v_passo := (v_tarefa->>'passo')::int;
+  v_caderno := (v_tarefa->>'caderno')::int;
+  v_tipo := v_tarefa->>'tipo';
+
+  -- A tarefa é de um passo que já passou (força-avanço aconteceu antes)
+  if v_passo <> coalesce((v_rodada.estado->>'passo_atual')::int, -1) then
+    perform _erro('RODADA_NAO_ESTA_ABERTA');
+  end if;
+
+  v_enviaram := coalesce(v_rodada.estado->'enviaram', '[]'::jsonb);
+  if v_enviaram @> to_jsonb(v_eu.id::text) then perform _erro('JA_ENVIOU'); end if;
+
+  if v_tipo = 'frase' then
+    v_texto := nullif(trim(coalesce(p_conteudo->>'texto', '')), '');
+    if v_texto is null then perform _erro('FRASE_VAZIA'); end if;
+    p_conteudo := jsonb_build_object('texto', v_texto);
+  else
+    if coalesce(jsonb_array_length(p_conteudo->'tracos'), 0) = 0 then
+      perform _erro('DESENHO_VAZIO');
+    end if;
+    p_conteudo := jsonb_build_object('tracos', p_conteudo->'tracos');
+  end if;
+
+  insert into etapas_desenho (sala_id, rodada_id, caderno, passo, autor_id, tipo, conteudo)
+  values (v_rodada.sala_id, p_rodada, v_caderno, v_passo, v_eu.id, v_tipo, p_conteudo)
+  on conflict (rodada_id, caderno, passo) do update set conteudo = excluded.conteudo;
+
+  v_enviaram := v_enviaram || to_jsonb(v_eu.id::text);
+
+  update rodadas set
+    estado = v_rodada.estado || jsonb_build_object('enviaram', v_enviaram),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+
+  v_total_jogadores := coalesce((v_rodada.estado->>'total_jogadores')::int, _ativos(v_rodada.sala_id));
+  v_total_passos := coalesce((v_rodada.estado->>'total_passos')::int, v_total_jogadores);
+
+  if jsonb_array_length(v_enviaram) >= v_total_jogadores then
+    if v_passo + 1 >= v_total_passos then
+      perform desenho_revelar(p_rodada);
+    else
+      perform _desenho_montar_passo(p_rodada, v_passo + 1);
+    end if;
+  end if;
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+/**
+ * Destrava um passo travado: o anfitrião pode forçar a qualquer momento;
+ * qualquer outra pessoa só depois que o prazo do passo estourar. Quem não
+ * mandou a etapa a tempo simplesmente deixa um buraco naquele passo — a
+ * revelação final mostra "ninguém respondeu" no lugar.
+ */
+create or replace function desenho_forcar_avanco(p_rodada uuid)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_eu participantes;
+  v_passo integer;
+  v_total_passos integer;
+  v_total_jogadores integer;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  v_eu := _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase <> 'em_andamento' then return; end if;
+
+  if not v_eu.e_anfitriao and (v_rodada.turno_fim is null or now() < v_rodada.turno_fim) then
+    perform _erro('AINDA_TEM_TEMPO');
+  end if;
+
+  v_passo := coalesce((v_rodada.estado->>'passo_atual')::int, 0);
+  v_total_jogadores := coalesce((v_rodada.estado->>'total_jogadores')::int, _ativos(v_rodada.sala_id));
+  v_total_passos := coalesce((v_rodada.estado->>'total_passos')::int, v_total_jogadores);
+
+  if v_passo + 1 >= v_total_passos then
+    perform desenho_revelar(p_rodada);
+  else
+    perform _desenho_montar_passo(p_rodada, v_passo + 1);
+  end if;
+end;
+$$;
+
+/** Monta a revelação final: cada caderno, do primeiro ao último passo. */
+create or replace function desenho_revelar(p_rodada uuid)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_autores jsonb;
+  v_n integer;
+  v_cadernos jsonb := '[]'::jsonb;
+  v_caderno integer;
+  v_passo integer;
+  v_etapa etapas_desenho;
+  v_autor_apelido text;
+  v_passos_caderno jsonb;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+  perform _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase <> 'em_andamento' then return v_rodada.resultado; end if;
+
+  v_autores := coalesce(v_rodada.estado->'autores', '[]'::jsonb);
+  v_n := jsonb_array_length(v_autores);
+
+  for v_caderno in 0..v_n - 1 loop
+    select apelido into v_autor_apelido from participantes
+    where id = (v_autores ->> v_caderno)::uuid;
+
+    v_passos_caderno := '[]'::jsonb;
+
+    for v_passo in 0..v_n - 1 loop
+      select * into v_etapa from etapas_desenho
+      where rodada_id = p_rodada and caderno = v_caderno and passo = v_passo;
+
+      if found then
+        v_passos_caderno := v_passos_caderno || jsonb_build_object(
+          'passo', v_passo, 'tipo', v_etapa.tipo,
+          'autor', (select apelido from participantes where id = v_etapa.autor_id),
+          'conteudo', v_etapa.conteudo
+        );
+      else
+        v_passos_caderno := v_passos_caderno || jsonb_build_object(
+          'passo', v_passo,
+          'tipo', case when v_passo % 2 = 1 then 'desenho' else 'frase' end,
+          'autor', null, 'conteudo', null
+        );
+      end if;
+    end loop;
+
+    v_cadernos := v_cadernos || jsonb_build_object(
+      'caderno', v_caderno, 'autor_original', v_autor_apelido, 'passos', v_passos_caderno
+    );
+  end loop;
+
+  update etapas_desenho set revelado = true where rodada_id = p_rodada;
+
+  update rodadas set
+    fase = 'resultado',
+    turno_fim = null,
+    resultado = jsonb_build_object('tipo', 'desenho_telefone', 'cadernos', v_cadernos),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+  return jsonb_build_object('cadernos', v_cadernos);
+end;
+$$;
+
+-- ============================================================================
+-- 10-D. CODE NAMES
+-- ============================================================================
+--
+-- Dois times, um tabuleiro de 25 palavras, uma cor verdadeira escondida atrás
+-- de cada uma. `estado.time_de` é um mapa participante→time ('A'|'B'): trocar
+-- de time é só sobrescrever a própria entrada, sem precisar tirar de lista
+-- nenhuma. O mapa de cores verdadeiras vive em `estados_privados` — uma cópia
+-- idêntica para cada um dos dois spymasters (tipo 'mapa_secreto') — e é lá que
+-- as próprias funções do servidor vão buscar a cor real de uma palavra.
+
+/** Entra (ou troca) de time. Trocar de time larga o posto de spymaster do time antigo. */
+create or replace function codenames_entrar_time(p_rodada uuid, p_time text)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_eu participantes;
+  v_estado jsonb;
+begin
+  if p_time not in ('A', 'B') then perform _erro('TIME_INVALIDO'); end if;
+
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  v_eu := _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase <> 'preparando' then perform _erro('RODADA_NAO_ESTA_ABERTA'); end if;
+
+  v_estado := v_rodada.estado || jsonb_build_object(
+    'time_de',
+    coalesce(v_rodada.estado->'time_de', '{}'::jsonb) || jsonb_build_object(v_eu.id::text, p_time)
+  );
+
+  if p_time <> 'A' and v_estado->>'spymaster_a' = v_eu.id::text then
+    v_estado := jsonb_set(v_estado, '{spymaster_a}', 'null'::jsonb);
+  end if;
+  if p_time <> 'B' and v_estado->>'spymaster_b' = v_eu.id::text then
+    v_estado := jsonb_set(v_estado, '{spymaster_b}', 'null'::jsonb);
+  end if;
+
+  update rodadas set estado = v_estado, atualizada_em = now() where id = p_rodada;
+  perform _toca_sala(v_rodada.sala_id);
+end;
+$$;
+
+/** Assume o posto de spymaster do próprio time (substitui quem estava antes). */
+create or replace function codenames_virar_spymaster(p_rodada uuid, p_time text)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_eu participantes;
+  v_meu_time text;
+begin
+  if p_time not in ('A', 'B') then perform _erro('TIME_INVALIDO'); end if;
+
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  v_eu := _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase <> 'preparando' then perform _erro('RODADA_NAO_ESTA_ABERTA'); end if;
+
+  v_meu_time := v_rodada.estado #>> array['time_de', v_eu.id::text];
+  if v_meu_time is distinct from p_time then perform _erro('NAO_ESTA_NO_TIME'); end if;
+
+  update rodadas set
+    estado = v_rodada.estado || jsonb_build_object(
+      case when p_time = 'A' then 'spymaster_a' else 'spymaster_b' end, to_jsonb(v_eu.id::text)
+    ),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+end;
+$$;
+
+/**
+ * Anfitrião destrava o tabuleiro: sorteia as 25 palavras, embaralha as cores
+ * (9 do time que começa, 8 do outro, 7 neutras, 1 bomba) e manda o mapa
+ * secreto para os dois spymasters.
+ */
+create or replace function codenames_iniciar_tabuleiro(p_rodada uuid)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_qtd_a integer;
+  v_qtd_b integer;
+  v_spy_a uuid;
+  v_spy_b uuid;
+  v_primeiro text;
+  v_segundo text;
+  v_cores jsonb;
+  v_palavras jsonb := '[]'::jsonb;
+  v_carta cartas;
+  v_usadas jsonb := '[]'::jsonb;
+  i integer;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+  perform _exige_anfitriao(v_rodada.sala_id);
+  if v_rodada.fase <> 'preparando' then perform _erro('RODADA_NAO_ESTA_ABERTA'); end if;
+
+  select count(*) into v_qtd_a from jsonb_each_text(coalesce(v_rodada.estado->'time_de', '{}'::jsonb))
+  where value = 'A';
+  select count(*) into v_qtd_b from jsonb_each_text(coalesce(v_rodada.estado->'time_de', '{}'::jsonb))
+  where value = 'B';
+  if v_qtd_a < 2 or v_qtd_b < 2 then perform _erro('TIME_INCOMPLETO'); end if;
+
+  v_spy_a := nullif(v_rodada.estado->>'spymaster_a', '')::uuid;
+  v_spy_b := nullif(v_rodada.estado->>'spymaster_b', '')::uuid;
+  if v_spy_a is null or v_spy_b is null then perform _erro('SEM_SPYMASTER'); end if;
+
+  v_primeiro := case when random() < 0.5 then 'A' else 'B' end;
+  v_segundo := case when v_primeiro = 'A' then 'B' else 'A' end;
+
+  select jsonb_agg(cor) into v_cores from (
+    select cor from (
+      select v_primeiro as cor from generate_series(1, 9)
+      union all select v_segundo from generate_series(1, 8)
+      union all select 'neutro' from generate_series(1, 7)
+      union all select 'bomba' from generate_series(1, 1)
+    ) x order by random()
+  ) y;
+
+  for i in 0..24 loop
+    v_carta := _sortear_carta('code-names', 'palavra', false, v_usadas);
+    v_usadas := v_usadas || to_jsonb(v_carta.id::text);
+    v_palavras := v_palavras || jsonb_build_object(
+      'indice', i, 'texto', v_carta.conteudo->>'texto', 'revelada', false, 'cor', null
+    );
+  end loop;
+
+  insert into estados_privados (sala_id, rodada_id, partida_id, dono_id, tipo, conteudo, visivel_para_dono)
+  values
+    (v_rodada.sala_id, p_rodada, v_rodada.partida_id, v_spy_a, 'mapa_secreto',
+     jsonb_build_object('cores', v_cores), true),
+    (v_rodada.sala_id, p_rodada, v_rodada.partida_id, v_spy_b, 'mapa_secreto',
+     jsonb_build_object('cores', v_cores), true)
+  on conflict (coalesce(rodada_id, partida_id), dono_id, tipo)
+  do update set conteudo = excluded.conteudo;
+
+  update rodadas set
+    fase = 'em_andamento',
+    estado = v_rodada.estado || jsonb_build_object(
+      'palavras', v_palavras,
+      'primeiro_time', v_primeiro,
+      'time_da_vez', v_primeiro,
+      'restantes', jsonb_build_object(v_primeiro, 9, v_segundo, 8),
+      'dica_atual', null,
+      'palpites_restantes', null,
+      'historico', '[]'::jsonb
+    ),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+end;
+$$;
+
+/** O spymaster do time da vez dá a dica: uma palavra (sem espaço/número) e um número. */
+create or replace function codenames_dar_dica(p_rodada uuid, p_palavra text, p_numero integer)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_eu participantes;
+  v_time text;
+  v_spy_id text;
+  v_palavra text := upper(trim(coalesce(p_palavra, '')));
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  v_eu := _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase <> 'em_andamento' then perform _erro('RODADA_NAO_ESTA_ABERTA'); end if;
+
+  v_time := v_rodada.estado->>'time_da_vez';
+  v_spy_id := v_rodada.estado->>(case when v_time = 'A' then 'spymaster_a' else 'spymaster_b' end);
+  if v_spy_id is distinct from v_eu.id::text then perform _erro('NAO_E_O_SPYMASTER'); end if;
+  if v_rodada.estado->>'dica_atual' is not null then perform _erro('DICA_JA_DADA'); end if;
+
+  if v_palavra = '' or v_palavra ~ '[0-9]' or v_palavra ~ '\s' then
+    perform _erro('DICA_INVALIDA');
+  end if;
+  if p_numero is null or p_numero < 0 or p_numero > 9 then perform _erro('DICA_INVALIDA'); end if;
+
+  update rodadas set
+    estado = v_rodada.estado || jsonb_build_object(
+      'dica_atual', jsonb_build_object('palavra', v_palavra, 'numero', p_numero, 'por', v_eu.apelido),
+      'palpites_restantes', p_numero + 1,
+      'historico', coalesce(v_rodada.estado->'historico', '[]'::jsonb) || jsonb_build_object(
+        'tipo', 'dica', 'time', v_time, 'palavra', v_palavra, 'numero', p_numero, 'por', v_eu.apelido
+      )
+    ),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+end;
+$$;
+
+/**
+ * Alguém do time da vez (nunca o spymaster) aponta uma palavra. Acertando a
+ * cor do próprio time e ainda com palpite sobrando, o turno continua; errando
+ * (cor do outro time ou neutra) o turno passa; pegando a bomba, o time perde
+ * na hora.
+ */
+create or replace function codenames_virar_palavra(p_rodada uuid, p_indice integer)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_eu participantes;
+  v_time text;
+  v_outro text;
+  v_meu_time text;
+  v_spy_id text;
+  v_cor text;
+  v_palavras jsonb;
+  v_item jsonb;
+  v_restantes jsonb;
+  v_qtd integer;
+  v_palpites integer;
+  v_historico jsonb;
+  v_vencedor text;
+  v_motivo text;
+  v_cores_completas jsonb;
+  v_tabuleiro jsonb;
+  i integer;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  v_eu := _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase <> 'em_andamento' then perform _erro('RODADA_NAO_ESTA_ABERTA'); end if;
+
+  v_time := v_rodada.estado->>'time_da_vez';
+  v_outro := case when v_time = 'A' then 'B' else 'A' end;
+  v_meu_time := v_rodada.estado #>> array['time_de', v_eu.id::text];
+
+  if v_meu_time is distinct from v_time then perform _erro('NAO_E_SEU_TIME'); end if;
+
+  v_spy_id := v_rodada.estado->>(case when v_time = 'A' then 'spymaster_a' else 'spymaster_b' end);
+  if v_spy_id = v_eu.id::text then perform _erro('SPYMASTER_NAO_CLICA'); end if;
+  if v_rodada.estado->>'dica_atual' is null then perform _erro('SEM_DICA_AINDA'); end if;
+
+  v_palavras := coalesce(v_rodada.estado->'palavras', '[]'::jsonb);
+  if p_indice < 0 or p_indice >= jsonb_array_length(v_palavras) then perform _erro('INDICE_INVALIDO'); end if;
+  v_item := v_palavras -> p_indice;
+  if coalesce((v_item->>'revelada')::boolean, false) then perform _erro('PALAVRA_JA_VIRADA'); end if;
+
+  select (conteudo->'cores')->>p_indice into v_cor
+  from estados_privados where rodada_id = p_rodada and tipo = 'mapa_secreto' limit 1;
+  if v_cor is null then perform _erro('SEM_TABULEIRO'); end if;
+
+  v_item := v_item || jsonb_build_object('revelada', true, 'cor', v_cor);
+  v_palavras := jsonb_set(v_palavras, array[p_indice::text], v_item);
+
+  v_historico := coalesce(v_rodada.estado->'historico', '[]'::jsonb) || jsonb_build_object(
+    'tipo', 'palpite', 'time', v_time, 'por', v_eu.apelido,
+    'texto', v_item->>'texto', 'cor', v_cor
+  );
+
+  v_restantes := coalesce(v_rodada.estado->'restantes', '{}'::jsonb);
+  v_palpites := coalesce((v_rodada.estado->>'palpites_restantes')::int, 1) - 1;
+
+  if v_cor = 'bomba' then
+    v_vencedor := v_outro;
+    v_motivo := 'bomba';
+  elsif v_cor = v_time then
+    v_qtd := coalesce((v_restantes->>v_time)::int, 0) - 1;
+    v_restantes := jsonb_set(v_restantes, array[v_time], to_jsonb(greatest(v_qtd, 0)));
+    if v_qtd <= 0 then
+      v_vencedor := v_time;
+      v_motivo := 'completou_palavras';
+    end if;
+  end if;
+
+  if v_vencedor is not null then
+    -- Revela o tabuleiro inteiro (cores verdadeiras) para o resumo final
+    select conteudo->'cores' into v_cores_completas
+    from estados_privados where rodada_id = p_rodada and tipo = 'mapa_secreto' limit 1;
+
+    v_tabuleiro := '[]'::jsonb;
+    for i in 0..jsonb_array_length(v_palavras) - 1 loop
+      v_tabuleiro := v_tabuleiro || jsonb_build_object(
+        'indice', i,
+        'texto', (v_palavras -> i) ->> 'texto',
+        'cor', v_cores_completas ->> i
+      );
+    end loop;
+
+    update rodadas set
+      fase = 'resultado',
+      estado = v_rodada.estado || jsonb_build_object(
+        'palavras', v_palavras, 'restantes', v_restantes, 'historico', v_historico
+      ),
+      resultado = jsonb_build_object(
+        'tipo', 'code_names', 'vencedor_time', v_vencedor, 'motivo', v_motivo, 'tabuleiro', v_tabuleiro
+      ),
+      turno_fim = null,
+      atualizada_em = now()
+    where id = p_rodada;
+
+    perform _toca_sala(v_rodada.sala_id);
+    return jsonb_build_object('fim', true, 'vencedor_time', v_vencedor, 'cor', v_cor);
+  end if;
+
+  if v_cor = v_time and v_palpites > 0 then
+    update rodadas set
+      estado = v_rodada.estado || jsonb_build_object(
+        'palavras', v_palavras, 'restantes', v_restantes,
+        'palpites_restantes', v_palpites, 'historico', v_historico
+      ),
+      atualizada_em = now()
+    where id = p_rodada;
+  else
+    update rodadas set
+      estado = v_rodada.estado || jsonb_build_object(
+        'palavras', v_palavras, 'restantes', v_restantes,
+        'time_da_vez', v_outro, 'dica_atual', null, 'palpites_restantes', null,
+        'historico', v_historico
+      ),
+      atualizada_em = now()
+    where id = p_rodada;
+  end if;
+
+  perform _toca_sala(v_rodada.sala_id);
+  return jsonb_build_object('fim', false, 'cor', v_cor);
+end;
+$$;
+
+/** O time da vez desiste de continuar chutando — passa a bola para o outro. */
+create or replace function codenames_passar_turno(p_rodada uuid)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_rodada rodadas;
+  v_eu participantes;
+  v_time text;
+  v_outro text;
+  v_meu_time text;
+begin
+  select * into v_rodada from rodadas where id = p_rodada;
+  if not found then perform _erro('RODADA_NAO_ENCONTRADA'); end if;
+
+  v_eu := _exige_participante(v_rodada.sala_id);
+  if v_rodada.fase <> 'em_andamento' then perform _erro('RODADA_NAO_ESTA_ABERTA'); end if;
+
+  v_time := v_rodada.estado->>'time_da_vez';
+  v_outro := case when v_time = 'A' then 'B' else 'A' end;
+  v_meu_time := v_rodada.estado #>> array['time_de', v_eu.id::text];
+
+  if v_meu_time is distinct from v_time then perform _erro('NAO_E_SEU_TIME'); end if;
+  if v_rodada.estado->>'dica_atual' is null then perform _erro('SEM_DICA_AINDA'); end if;
+
+  update rodadas set
+    estado = v_rodada.estado || jsonb_build_object(
+      'time_da_vez', v_outro, 'dica_atual', null, 'palpites_restantes', null
+    ),
+    atualizada_em = now()
+  where id = p_rodada;
+
+  perform _toca_sala(v_rodada.sala_id);
+end;
+$$;
+
+-- ============================================================================
 -- 10. LEITURA: o estado inteiro da sala em uma chamada
 -- ============================================================================
 
@@ -1757,6 +2906,8 @@ grant execute on function
   iniciar_partida(uuid, jogo_id, jsonb), proxima_rodada(uuid), encerrar_partida(uuid),
   avancar_turno(uuid, text), registrar_timeout(uuid), confirmar_eliminacao(uuid),
   reiniciar_turno(uuid), pular_vez(uuid),
+  csc_marcar_pronto(uuid), csc_forcar_inicio(uuid), csc_enviar_palavra(uuid, text),
+  csc_registrar_timeout(uuid), csc_avaliar_palavra(uuid, integer, text), csc_revelar(uuid),
   mimica_iniciar(uuid), mimica_acertou(uuid), mimica_encerrar(uuid),
   quem_sou_eu_responder(uuid, text), quem_sou_eu_palpite(uuid, text),
   duas_verdades_enviar(uuid, text[], integer), duas_verdades_votar(uuid, integer),
@@ -1764,5 +2915,10 @@ grant execute on function
   verdade_desafio_sortear(uuid, text, boolean), verdade_desafio_resolver(uuid, text),
   cara_a_cara_perguntar(uuid, text), cara_a_cara_responder(uuid, text),
   cara_a_cara_eliminar(uuid, uuid, boolean), cara_a_cara_palpite(uuid, uuid),
+  cronometro_enviar(uuid, integer), cronometro_revelar(uuid),
+  desenho_enviar_etapa(uuid, jsonb), desenho_forcar_avanco(uuid), desenho_revelar(uuid),
+  codenames_entrar_time(uuid, text), codenames_virar_spymaster(uuid, text),
+  codenames_iniciar_tabuleiro(uuid), codenames_dar_dica(uuid, text, integer),
+  codenames_virar_palavra(uuid, integer), codenames_passar_turno(uuid),
   estado_da_sala(uuid), agora()
 to authenticated;

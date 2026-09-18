@@ -120,8 +120,41 @@ const CENAS: Cena[] = [
       <Mesa
         sala={comoSala(
           base("c-s-composto", {
-            estado: { categoria: "Frutas", sequencia: ["C", "S", "Composto"], indice: 1 },
-            turno_fim: daquiA(4)
+            vez_de: IDS.bruno,
+            estado: {
+              palavra_atual: "Onda",
+              historico: [
+                { palavra: "Praia", autor: null, autor_id: null },
+                { palavra: "Onda", autor: "Ana", autor_id: IDS.ana }
+              ],
+              meta_rodadas: 10,
+              rodada_atual: 1
+            },
+            turno_fim: daquiA(8)
+          })
+        )}
+        aoSair={() => {}}
+      />
+    )
+  },
+  {
+    nome: "C, S, Composto (votação)",
+    render: () => (
+      <Mesa
+        sala={comoSala(
+          base("c-s-composto", {
+            fase: "votacao",
+            vez_de: null,
+            estado: {
+              historico: [
+                { palavra: "Praia", autor: null, autor_id: null },
+                { palavra: "Onda", autor: "Ana", autor_id: IDS.ana },
+                { palavra: "Vento", autor: "Bruno", autor_id: IDS.bruno }
+              ],
+              avaliacoes_feitas: 2,
+              avaliacoes_esperadas: 6
+            },
+            turno_fim: daquiA(90)
           })
         )}
         aoSair={() => {}}
@@ -194,6 +227,147 @@ const CENAS: Cena[] = [
             priv(IDS.ana, "personagem", { ...PAINEL[4].p, carta_id: PAINEL[4].id }),
             priv(IDS.ana, "eliminados", { ids: [PAINEL[0].id, PAINEL[2].id, PAINEL[7].id] })
           ]
+        )}
+        aoSair={() => {}}
+      />
+    )
+  },
+  {
+    nome: "Cronômetro",
+    render: () => (
+      <Mesa
+        sala={comoSala(
+          base("cronometro", {
+            vez_de: null,
+            estado: {
+              total_jogadores: 4,
+              resultados: [
+                { participante_id: IDS.bruno, apelido: "Bruno", alvo_ms: 6120, tempo_ms: 6340, erro_ms: 220 }
+              ]
+            },
+            turno_fim: daquiA(52)
+          }),
+          [priv(IDS.ana, "alvo_tempo", { alvo_ms: 7482 })]
+        )}
+        aoSair={() => {}}
+      />
+    )
+  },
+  {
+    nome: "Desenho Telefone (desenhar)",
+    render: () => (
+      <Mesa
+        sala={comoSala(
+          base("desenho-telefone", {
+            vez_de: null,
+            estado: {
+              passo_atual: 1, total_passos: 4, total_jogadores: 4, tipo_passo: "desenho",
+              enviaram: [IDS.carla]
+            },
+            turno_fim: daquiA(70)
+          }),
+          [
+            priv(IDS.ana, "tarefa_desenho", {
+              caderno: 3, passo: 1, tipo: "desenho", anterior: { texto: "um gato surfando" }
+            })
+          ]
+        )}
+        aoSair={() => {}}
+      />
+    )
+  },
+  {
+    nome: "Desenho Telefone (legendar + revelação)",
+    render: () => (
+      <Mesa
+        sala={comoSala(
+          base("desenho-telefone", {
+            fase: "resultado",
+            vez_de: null,
+            estado: {
+              passo_atual: 3, total_passos: 4, total_jogadores: 4, tipo_passo: "frase", enviaram: []
+            },
+            resultado: {
+              tipo: "desenho_telefone",
+              cadernos: [
+                {
+                  caderno: 0,
+                  autor_original: "Ana",
+                  passos: [
+                    { passo: 0, tipo: "frase", autor: "Ana", conteudo: { texto: "um gato surfando" } },
+                    {
+                      passo: 1, tipo: "desenho", autor: "Bruno",
+                      conteudo: { tracos: [{ cor: "#1a1a1a", pontos: [[10, 80], [50, 20], [90, 80]] }] }
+                    },
+                    { passo: 2, tipo: "frase", autor: "Carla", conteudo: { texto: "uma tenda de circo" } },
+                    { passo: 3, tipo: "desenho", autor: null, conteudo: null }
+                  ]
+                }
+              ]
+            }
+          }),
+          [
+            priv(IDS.ana, "tarefa_desenho", {
+              caderno: 2, passo: 3, tipo: "frase",
+              anterior: { tracos: [{ cor: "#dc2626", pontos: [[20, 20], [80, 80]] }] }
+            })
+          ]
+        )}
+        aoSair={() => {}}
+      />
+    )
+  },
+  {
+    nome: "Code Names (times)",
+    render: () => (
+      <Mesa
+        sala={comoSala(
+          base("code-names", {
+            fase: "preparando",
+            vez_de: null,
+            estado: {
+              time_de: { [IDS.ana]: "A", [IDS.bruno]: "A", [IDS.carla]: "B" },
+              spymaster_a: IDS.ana,
+              spymaster_b: null
+            }
+          })
+        )}
+        aoSair={() => {}}
+      />
+    )
+  },
+  {
+    nome: "Code Names (tabuleiro)",
+    render: () => (
+      <Mesa
+        sala={comoSala(
+          base("code-names", {
+            vez_de: null,
+            estado: {
+              time_de: { [IDS.ana]: "A", [IDS.bruno]: "A", [IDS.carla]: "B", [IDS.davi]: "B" },
+              spymaster_a: IDS.ana,
+              spymaster_b: IDS.carla,
+              time_da_vez: "A",
+              dica_atual: { palavra: "PRAIA", numero: 3, por: "Ana" },
+              palpites_restantes: 3,
+              restantes: { A: 7, B: 8 },
+              palavras: [
+                { indice: 0, texto: "Sol", revelada: true, cor: "A" },
+                { indice: 1, texto: "Areia", revelada: false, cor: null },
+                { indice: 2, texto: "Concha", revelada: false, cor: null },
+                { indice: 3, texto: "Foguete", revelada: false, cor: null },
+                { indice: 4, texto: "Vulcão", revelada: false, cor: null },
+                { indice: 5, texto: "Gato", revelada: false, cor: null },
+                { indice: 6, texto: "Piano", revelada: false, cor: null },
+                { indice: 7, texto: "Escola", revelada: false, cor: null },
+                { indice: 8, texto: "Ponte", revelada: false, cor: null },
+                { indice: 9, texto: "Robô", revelada: false, cor: null }
+              ]
+            }
+          }),
+          [priv(IDS.ana, "mapa_secreto", {
+            cores: ["A", "A", "A", "B", "bomba", "B", "neutro", "neutro", "B", "A"]
+          })]
         )}
         aoSair={() => {}}
       />

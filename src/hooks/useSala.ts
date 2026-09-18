@@ -33,6 +33,8 @@ const TABELAS: ReadonlyArray<{ nome: string; coluna: string }> = [
   { nome: "estados_privados", coluna: "sala_id" },
   { nome: "envios", coluna: "sala_id" },
   { nome: "votos", coluna: "sala_id" },
+  { nome: "avaliacoes", coluna: "sala_id" },
+  { nome: "etapas_desenho", coluna: "sala_id" },
   { nome: "pontuacoes", coluna: "sala_id" },
   { nome: "duelos", coluna: "sala_id" }
 ];

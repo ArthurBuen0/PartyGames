@@ -12,7 +12,12 @@ export type JogoId =
   | "mimica"
   | "cara-a-cara"
   | "duas-verdades"
-  | "verdade-ou-desafio";
+  | "verdade-ou-desafio"
+  | "cronometro"
+  | "desenho-telefone"
+  | "code-names";
+
+export type TimeCodeNames = "A" | "B";
 
 export type StatusSala = "lobby" | "jogando" | "encerrada";
 
@@ -60,17 +65,33 @@ export interface Partida {
   };
 }
 
+/** Um traço do Desenho Telefone: uma cor, uma sequência de pontos [x, y] em 0–100. */
+export interface Traco {
+  cor: string;
+  pontos: Array<[number, number]>;
+}
+
+export interface ConteudoDesenho {
+  tracos: Traco[];
+}
+
+export interface ConteudoFrase {
+  texto: string;
+}
+
 /** União frouxa: cada jogo enche a parte que lhe interessa. */
 export interface EstadoRodada {
-  // C, S, Composto
-  categoria?: string;
-  sequencia?: string[];
-  indice?: number;
-  voltas?: number;
-
-  // Palavra Parecida
+  // Palavra Parecida / C, S, Composto (cadeia de palavras)
   palavra_atual?: string;
   historico?: Array<Record<string, unknown>>;
+
+  // C, S, Composto
+  meta_rodadas?: number;
+  rodada_atual?: number;
+  prontos?: string[];
+  total_prontos?: number;
+  avaliacoes_feitas?: number;
+  avaliacoes_esperadas?: number;
 
   // Quem Sou Eu?
   perguntas?: Record<string, number>;
@@ -95,10 +116,50 @@ export interface EstadoRodada {
 
   // Cara a Cara
   mesas?: number;
+
+  // Cronômetro
+  resultados?: Array<{
+    participante_id: string;
+    apelido: string;
+    alvo_ms: number;
+    tempo_ms: number;
+    erro_ms: number;
+  }>;
+  total_jogadores?: number;
+
+  // Desenho Telefone
+  autores?: string[];
+  passo_atual?: number;
+  total_passos?: number;
+  tipo_passo?: "frase" | "desenho";
+  enviaram?: string[];
+
+  // Code Names
+  time_de?: Record<string, TimeCodeNames>;
+  spymaster_a?: string | null;
+  spymaster_b?: string | null;
+  primeiro_time?: TimeCodeNames | null;
+  time_da_vez?: TimeCodeNames | null;
+  palavras?: Array<{
+    indice: number;
+    texto: string;
+    revelada: boolean;
+    cor: TimeCodeNames | "neutro" | "bomba" | null;
+  }>;
+  restantes?: Record<string, number>;
+  dica_atual?: { palavra: string; numero: number; por: string } | null;
+  palpites_restantes?: number | null;
 }
 
 export interface ResultadoRodada {
-  tipo?: "tempo_esgotado" | "mimica_fim" | "duas_verdades";
+  tipo?:
+    | "tempo_esgotado"
+    | "mimica_fim"
+    | "duas_verdades"
+    | "c_s_composto_votacao"
+    | "cronometro"
+    | "desenho_telefone"
+    | "code_names";
   perdedor?: string;
   perdedor_id?: string;
   vencedor?: string;
@@ -112,6 +173,49 @@ export interface ResultadoRodada {
   autor_id?: string;
   enganados?: number;
   votos?: Array<{ apelido: string; voto: number; acertou: boolean }>;
+
+  // C, S, Composto — resultado da votação anônima, palavra por palavra
+  avaliacoes?: Array<{
+    indice: number;
+    palavra: string;
+    autor: string;
+    autor_id: string;
+    valeu: number;
+    nao_valeu: number;
+    neutro: number;
+    delta: number;
+  }>;
+
+  // Cronômetro — resultado final, já com quem ganhou
+  resultados?: Array<{
+    participante_id: string;
+    apelido: string;
+    alvo_ms: number;
+    tempo_ms: number;
+    erro_ms: number;
+  }>;
+  vencedores?: string[];
+
+  // Desenho Telefone — cada caderno, do primeiro ao último passo
+  cadernos?: Array<{
+    caderno: number;
+    autor_original: string;
+    passos: Array<{
+      passo: number;
+      tipo: "frase" | "desenho";
+      autor: string | null;
+      conteudo: ConteudoFrase | ConteudoDesenho | null;
+    }>;
+  }>;
+
+  // Code Names
+  vencedor_time?: TimeCodeNames;
+  motivo?: "completou_palavras" | "bomba";
+  tabuleiro?: Array<{
+    indice: number;
+    texto: string;
+    cor: TimeCodeNames | "neutro" | "bomba";
+  }>;
 }
 
 export interface Rodada {
@@ -170,7 +274,15 @@ export interface EstadoPrivado {
   rodada_id: string | null;
   partida_id: string | null;
   dono_id: string;
-  tipo: "identidade" | "palavra" | "personagem" | "eliminados" | "frases";
+  tipo:
+    | "identidade"
+    | "palavra"
+    | "personagem"
+    | "eliminados"
+    | "frases"
+    | "alvo_tempo"
+    | "tarefa_desenho"
+    | "mapa_secreto";
   conteudo: Record<string, unknown>;
   visivel_para_dono: boolean;
 }

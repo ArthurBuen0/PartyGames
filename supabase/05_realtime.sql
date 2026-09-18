@@ -18,6 +18,8 @@ alter table rodadas           replica identity full;
 alter table estados_privados  replica identity full;
 alter table envios            replica identity full;
 alter table votos             replica identity full;
+alter table avaliacoes        replica identity full;
+alter table etapas_desenho    replica identity full;
 alter table pontuacoes        replica identity full;
 alter table duelos            replica identity full;
 
@@ -34,7 +36,8 @@ begin
 
   foreach v_tabela in array array[
     'salas', 'participantes', 'partidas', 'rodadas',
-    'estados_privados', 'envios', 'votos', 'pontuacoes', 'duelos'
+    'estados_privados', 'envios', 'votos', 'avaliacoes', 'etapas_desenho',
+    'pontuacoes', 'duelos'
   ] loop
     if not exists (
       select 1 from pg_publication_tables

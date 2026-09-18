@@ -26,6 +26,7 @@ export function Lobby({ sala, aoSair }: { sala: SalaAoVivo; aoSair: () => void }
   const [removendo, setRemovendo] = useState<string | null>(null);
   const [iniciando, setIniciando] = useState(false);
   const [limitePerguntas, setLimitePerguntas] = useState(true);
+  const [rodadasCSC, setRodadasCSC] = useState(10);
 
   const jogoEscolhido = jogoPorId(estado.sala.jogo_atual);
   const totalJogadores = estado.participantes.length;
@@ -77,7 +78,9 @@ export function Lobby({ sala, aoSair }: { sala: SalaAoVivo; aoSair: () => void }
           p_config:
             jogoEscolhido.id === "quem-sou-eu"
               ? { limitePerguntas: limitePerguntas ? 10 : null }
-              : {}
+              : jogoEscolhido.id === "c-s-composto"
+                ? { rodadas: rodadasCSC }
+                : {}
         }),
       "Partida começando! 🎮"
     );
@@ -184,6 +187,42 @@ export function Lobby({ sala, aoSair }: { sala: SalaAoVivo; aoSair: () => void }
               </span>
             </span>
           </label>
+        </Cartao>
+      )}
+
+      {souAnfitriao && jogoEscolhido?.id === "c-s-composto" && (
+        <Cartao>
+          <h3 className="fonte-titulo text-lg">Opções de C, S, Composto</h3>
+          <label htmlFor="rodadas-csc" className="mt-3 block font-bold">
+            Número de rodadas
+          </label>
+          <p className="mb-2 text-sm text-texto-suave">
+            Cada rodada é uma palavra na cadeia. No fim, todo mundo vota.
+          </p>
+          <div className="flex items-center gap-3">
+            <Botao
+              type="button"
+              variante="secundario"
+              onClick={() => setRodadasCSC((n) => Math.max(3, n - 1))}
+              aria-label="Diminuir número de rodadas"
+            >
+              −
+            </Botao>
+            <span
+              id="rodadas-csc"
+              className="numeros-fixos min-w-[3ch] text-center fonte-titulo text-2xl font-extrabold text-roxo-900"
+            >
+              {rodadasCSC}
+            </span>
+            <Botao
+              type="button"
+              variante="secundario"
+              onClick={() => setRodadasCSC((n) => Math.min(30, n + 1))}
+              aria-label="Aumentar número de rodadas"
+            >
+              +
+            </Botao>
+          </div>
         </Cartao>
       )}
 
