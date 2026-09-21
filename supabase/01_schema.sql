@@ -29,6 +29,15 @@ alter type jogo_id add value if not exists 'cronometro';
 alter type jogo_id add value if not exists 'desenho-telefone';
 alter type jogo_id add value if not exists 'code-names';
 
+-- O SQL Editor do Supabase roda o arquivo colado inteiro como uma transação
+-- só. Sem fechar aqui, Postgres recusa QUALQUER uso dos valores novos do
+-- enum mais adiante no mesmo arquivo — nem comparação, nem um INSERT simples
+-- (é o erro "unsafe use of new value ... must be committed before they can
+-- be used"). Este COMMIT fecha só a parte do enum; o resto do arquivo segue
+-- rodando normalmente logo em seguida, cada instrução na sua própria
+-- transação (fora de um `begin`, é como o Postgres já roda por padrão).
+commit;
+
 do $$ begin
   create type status_sala as enum ('lobby', 'jogando', 'encerrada');
 exception when duplicate_object then null; end $$;
