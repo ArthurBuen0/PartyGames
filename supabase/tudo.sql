@@ -696,10 +696,20 @@ begin
 end;
 $$;
 
-/** Duração do turno de cada jogo, em segundos. null = sem cronômetro. */
+/**
+ * Duração do turno de cada jogo, em segundos. null = sem cronômetro.
+ *
+ * `language plpgsql` de propósito, não `sql`: funções SQL têm o corpo
+ * analisado já na criação, o que conta como "uso" dos valores do enum
+ * `jogo_id` ali dentro — e um valor recém-adicionado ao enum (via `alter
+ * type ... add value`, como os jogos novos) não pode ser comparado antes do
+ * commit daquele `alter type`. Em plpgsql o corpo só é analisado na primeira
+ * chamada, bem depois da migração ter commitado, então o problema não existe.
+ */
 create or replace function _duracao_turno(p_jogo jogo_id, p_fase fase_rodada)
-returns integer language sql immutable as $$
-  select case
+returns integer language plpgsql immutable as $$
+begin
+  return case
     when p_jogo = 'c-s-composto' and p_fase = 'em_andamento' then 10
     when p_jogo = 'c-s-composto' and p_fase = 'votacao' then 120
     when p_jogo = 'palavra-parecida' then 5
@@ -713,6 +723,7 @@ returns integer language sql immutable as $$
     -- prazo na hora e sobrescreve o que vier daqui.
     else null
   end;
+end;
 $$;
 
 -- ============================================================================
